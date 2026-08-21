@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="cr-token" content="__CR_TOKEN__">
+<title>Companies Research Agent</title>
+<link rel="stylesheet" href="/static/styles.css?v=__CR_ASSET_VERSION__">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔎</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">🔎</span>
+    <span data-i18n="app.name">Companies Research Agent</span>
+  </div>
+  <nav class="topbar-actions">
+    <button class="ghost" data-nav="dashboard" data-i18n="nav.home">Home</button>
+    <button class="ghost" data-nav="settings" data-i18n="nav.settings">Settings</button>
+    <button class="ghost lang" id="lang-toggle">Tiếng Việt</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============================ SETUP ============================ -->
+<section id="view-setup" hidden>
+  <h1 data-i18n="setup.title">Let's get you set up</h1>
+  <p class="lede" data-i18n="setup.lede">Three short steps. You only do this once.</p>
+
+  <ol class="rail" id="rail">
+    <li data-step="mailbox"><span class="dot">1</span><span data-i18n="setup.step1">Connect your email</span></li>
+    <li data-step="key"><span class="dot">2</span><span data-i18n="setup.step2">Add your Claude key</span></li>
+    <li data-step="seed"><span class="dot">3</span><span data-i18n="setup.step3">Learn your contacts</span></li>
+  </ol>
+
+  <!-- Step 1 -->
+  <article class="card" id="card-mailbox">
+    <h2 data-i18n="mailbox.title">Connect your email</h2>
+    <p class="muted" data-i18n="mailbox.blurb">The agent only ever reads your mail. It never sends, deletes or changes anything.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="apppass" data-i18n="mailbox.tab.easy">App password — easiest</button>
+      <button class="tab" data-tab="google" data-i18n="mailbox.tab.google">Sign in with Google</button>
+    </div>
+
+    <!-- App password -->
+    <div class="tabpanel" data-panel="apppass">
+      <p class="hint" data-i18n="mailbox.easy.hint">Works with Gmail, Outlook, Yahoo, iCloud, Zoho, Fastmail and company mail servers. Takes about two minutes.</p>
+
+      <label class="field">
+        <span data-i18n="mailbox.provider">Email provider</span>
+        <select id="imap-preset"></select>
+      </label>
+
+      <label class="field">
+        <span data-i18n="mailbox.email">Your email address</span>
+        <input id="imap-email" type="email" autocomplete="email" placeholder="you@company.com">
+      </label>
+
+      <div id="apppass-help" class="callout" hidden>
+        <p><strong data-i18n="mailbox.help.title">How to get an app password</strong></p>
+        <ol id="apppass-steps"></ol>
+        <a id="apppass-link" class="btn small" target="_blank" rel="noopener" data-i18n="mailbox.help.open">Open the app password page</a>
+      </div>
+
+      <label class="field">
+        <span data-i18n="mailbox.password">App password</span>
+        <input id="imap-password" type="password" autocomplete="off" placeholder="xxxx xxxx xxxx xxxx">
+        <small class="muted" data-i18n="mailbox.password.note">This is not your normal login password. It is a one-off password you generate for this app.</small>
+      </label>
+
+      <div class="two" id="imap-manual" hidden>
+        <label class="field">
+          <span data-i18n="mailbox.server">Incoming mail server (IMAP)</span>
+          <input id="imap-host" placeholder="imap.company.com">
+        </label>
+        <label class="field">
+          <span data-i18n="mailbox.port">Port</span>
+          <input id="imap-port" type="number" value="993">
+        </label>
+      </div>
+
+      <button class="btn primary" id="imap-connect" data-i18n="mailbox.connect">Connect this mailbox</button>
+      <p class="error" id="imap-error" hidden></p>
+    </div>
+
+    <!-- Google OAuth -->
+    <div class="tabpanel" data-panel="google" hidden>
+      <p class="hint" data-i18n="mailbox.google.hint">Longer to set up, but no password to manage — and it is what lets the agent read your calendar later.</p>
+
+      <ol class="numbered" id="google-steps"></ol>
+
+      <div class="drop" id="drop">
+        <p data-i18n="mailbox.google.drop">Drag the downloaded JSON file here</p>
+        <button class="btn small" id="pick-file" data-i18n="mailbox.google.pick">or choose the file</button>
+        <input type="file" id="file-input" accept=".json,application/json" hidden>
+      </div>
+      <p class="ok" id="google-file-ok" hidden data-i18n="mailbox.google.saved">Credentials file saved.</p>
+
+      <div class="callout">
+        <strong data-i18n="google.warn.title">Google will say the app is not verified</strong>
+        <p data-i18n="google.warn.body">That is expected: the app is the one you just created, it runs on this computer, and only you use it — so Google has nothing to verify it against. Reading your own mail with your own credentials is exactly what it is for.</p>
+        <p data-i18n="google.warn.how">On that screen click “Advanced” at the bottom left, then “Go to … (unsafe)”, and approve.</p>
+        <p data-i18n="google.warn.tester">If instead it says the app “has not completed the Google verification process”, the address you signed in with is not in Test users — add it under Audience in the Console, then try again.</p>
+      </div>
+
+      <button class="btn primary" id="google-connect" data-i18n="mailbox.google.connect">Sign in with Google</button>
+      <p class="error" id="google-error" hidden></p>
+    </div>
+
+    <ul class="mailbox-list" id="mailbox-list"></ul>
+  </article>
+
+  <!-- Step 2 -->
+  <article class="card" id="card-key" hidden>
+    <h2 data-i18n="key.title">Add your Claude API key</h2>
+    <p class="muted" data-i18n="key.blurb">Claude reads each new email and decides who is a real business contact. You pay Anthropic directly for what you use — typically a few cents a day.</p>
+    <ol class="numbered">
+      <li data-i18n="key.step1">Open the Anthropic Console and sign in.</li>
+      <li data-i18n="key.step2">Go to API keys and create a key.</li>
+      <li data-i18n="key.step3">Copy it and paste it below.</li>
+    </ol>
+    <a class="btn small" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" data-i18n="key.open">Open the Anthropic Console</a>
+
+    <label class="field">
+      <span data-i18n="key.label">API key</span>
+      <input id="api-key" type="password" placeholder="sk-ant-…" autocomplete="off">
+    </label>
+    <button class="btn primary" id="key-save" data-i18n="key.save">Check and save</button>
+    <p class="error" id="key-error" hidden></p>
+  </article>
+
+  <!-- Step 3 -->
+  <article class="card" id="card-seed" hidden>
+    <h2 data-i18n="seed.title">Learn who you already know</h2>
+    <p class="muted" data-i18n="seed.blurb">The agent reads through your past conversations once, so that people you have dealt with before are not reported as new. Nothing is sent anywhere during this step.</p>
+    <label class="field narrow">
+      <span data-i18n="seed.range">How far back should it look?</span>
+      <select id="seed-months">
+        <option value="3" data-i18n="seed.3m">3 months</option>
+        <option value="6" selected data-i18n="seed.6m">6 months</option>
+        <option value="12" data-i18n="seed.12m">1 year</option>
+      </select>
+    </label>
+    <button class="btn primary" id="seed-start" data-i18n="seed.start">Start</button>
+    <p class="hint" data-i18n="seed.slow">This can take a few minutes for a busy mailbox.</p>
+    <p class="error" id="seed-error" hidden></p>
+  </article>
+</section>
+
+<!-- ========================== DASHBOARD ========================== -->
+<section id="view-dashboard" hidden>
+  <div class="dash-head">
+    <div>
+      <h1 data-i18n="dash.title">New business contacts</h1>
+      <p class="muted" id="dash-sub"></p>
+    </div>
+    <button class="btn primary big" id="scan-now" data-i18n="dash.scan">Check my email now</button>
+  </div>
+
+  <p class="watch-status muted small" id="watch-status"></p>
+  <div class="stats" id="stats"></div>
+  <p class="error" id="dash-error" hidden></p>
+  <div id="leads"></div>
+</section>
+
+<!-- ========================== SETTINGS =========================== -->
+<section id="view-settings" hidden>
+  <h1 data-i18n="settings.title">Settings</h1>
+
+  <article class="card">
+    <h2 data-i18n="settings.mailboxes">Mailboxes</h2>
+    <ul class="mailbox-list" id="settings-mailboxes"></ul>
+    <button class="btn" id="add-mailbox" data-i18n="settings.addMailbox">Add another mailbox</button>
+  </article>
+
+  <article class="card">
+    <h2 data-i18n="settings.key">Claude API key</h2>
+    <p class="muted" id="key-masked"></p>
+    <label class="field">
+      <span data-i18n="settings.newKey">Replace the key</span>
+      <input id="settings-key" type="password" placeholder="sk-ant-…" autocomplete="off">
+    </label>
+    <button class="btn" id="settings-key-save" data-i18n="key.save">Check and save</button>
+    <p class="error" id="settings-key-error" hidden></p>
+  </article>
+
+  <article class="card">
+    <h2 data-i18n="settings.watch">Checking for new mail</h2>
+    <label class="check">
+      <input type="checkbox" id="watch-enabled">
+      <span data-i18n="settings.watch.on">Check automatically as new mail arrives</span>
+    </label>
+    <label class="field narrow">
+      <span data-i18n="settings.watch.every">How often to look</span>
+      <select id="watch-interval">
+        <option value="1" data-i18n="settings.watch.1">Every minute</option>
+        <option value="5" data-i18n="settings.watch.5">Every 5 minutes</option>
+        <option value="15" data-i18n="settings.watch.15">Every 15 minutes</option>
+        <option value="60" data-i18n="settings.watch.60">Every hour</option>
+      </select>
+    </label>
+    <p class="muted small" data-i18n="settings.watch.note">Only mail that arrives from now on is ever looked at, so checking often costs nothing when nothing has come in.</p>
+  </article>
+
+  <article class="card">
+    <h2 data-i18n="settings.behaviour">What counts as new</h2>
+    <label class="field">
+      <span data-i18n="settings.ignored">Domains to always ignore</span>
+      <input id="ignored" placeholder="mycompany.com, supplier.com">
+      <small class="muted" data-i18n="settings.ignored.note">Your own company and anyone you never want reported. Separate with commas.</small>
+    </label>
+    <label class="field narrow">
+      <span data-i18n="settings.window">Furthest back to catch up</span>
+      <select id="scan-days">
+        <option value="1" data-i18n="settings.window.1">Last 24 hours</option>
+        <option value="3" data-i18n="settings.window.3">Last 3 days</option>
+        <option value="7" data-i18n="settings.window.7">Last week</option>
+      </select>
+    </label>
+    <label class="field narrow">
+      <span data-i18n="settings.model">Claude model</span>
+      <select id="model">
+        <option value="claude-opus-5" data-i18n="settings.model.best">Most accurate (Opus)</option>
+        <option value="claude-sonnet-5" data-i18n="settings.model.balanced">Balanced (Sonnet)</option>
+        <option value="claude-haiku-4-5" data-i18n="settings.model.cheap">Cheapest (Haiku)</option>
+      </select>
+    </label>
+    <button class="btn" id="settings-save" data-i18n="settings.save">Save</button>
+    <p class="ok" id="settings-saved" hidden data-i18n="settings.saved">Saved.</p>
+  </article>
+
+  <article class="card danger">
+    <h2 data-i18n="settings.reset">Erase stored data</h2>
+    <p class="muted" data-i18n="settings.reset.note">Deletes the local record of who you know and which emails were checked. Your mail is untouched. The next check will treat everyone as new until you re-run step 3.</p>
+    <button class="btn danger" id="purge" data-i18n="settings.reset.button">Erase</button>
+  </article>
+</section>
+
+</main>
+
+<!-- ========================= JOB OVERLAY ========================= -->
+<div class="overlay" id="overlay" hidden>
+  <div class="panel">
+    <div class="spinner" id="job-spinner"></div>
+    <h3 id="job-title"></h3>
+    <p id="job-phase" class="muted"></p>
+    <div id="job-result"></div>
+    <details id="job-details">
+      <summary data-i18n="job.details">Show details</summary>
+      <pre id="job-log"></pre>
+    </details>
+    <button class="btn" id="job-cancel" hidden data-i18n="job.cancel">Cancel</button>
+    <button class="btn" id="job-close" hidden data-i18n="job.close">Close</button>
+  </div>
+</div>
+
+<script src="/static/i18n.js?v=__CR_ASSET_VERSION__"></script>
+<script src="/static/app.js?v=__CR_ASSET_VERSION__"></script>
+</body>
+</html>
