@@ -136,6 +136,25 @@ class NewsItem(BaseModel):
     summary: str = Field(default="", description="One sentence on why it matters.")
 
 
+class FieldSource(BaseModel):
+    """The one page that supports one finding.
+
+    A list rather than a mapping because structured outputs cannot express an
+    open-ended object: a schema with `additionalProperties` typed as anything
+    other than false is rejected outright.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(
+        description=(
+            "Which finding this supports: one_liner, description, industry, "
+            "hq_location, size_estimate, founded, products, or meeting_prep."
+        )
+    )
+    url: str = Field(description="The page it was read on.")
+
+
 class CompanyProfile(BaseModel):
     """What research finds out about one company.
 
@@ -168,9 +187,75 @@ class CompanyProfile(BaseModel):
     sources: list[str] = Field(
         default_factory=list, description="URLs the findings came from."
     )
+    field_sources: list[FieldSource] = Field(
+        default_factory=list,
+        description=(
+            "Which page each finding came from, one entry per attributable field. "
+            "A brief shows these next to each claim."
+        ),
+    )
     confidence: float = Field(
         ge=0.0, le=1.0, description="How well-evidenced this profile is."
     )
     notes: str = Field(
         default="", description="Anything ambiguous, e.g. two companies share this name."
     )
+
+    def source_for(self, field: str) -> str | None:
+        """The page backing one finding, or None if it was never attributed."""
+        for entry in self.field_sources:
+            if entry.field == field:
+                return entry.url or None
+        return None
+
+
+class BriefClaim(BaseModel):
+    """One assertion in a brief, and what backs it.
+
+    A claim without a ``source_url`` is not suppressed — it is rendered as
+    unverified and named in the brief's ``unknowns``. Hiding it would let the
+    reader assume everything shown is evidenced.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    value: str | None = None
+    source_url: str | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @property
+    def verified(self) -> bool:
+        return bool(self.value) and bool(self.source_url)
+
+
+class Brief(BaseModel):
+    """Everything known about one lead, assembled for a person to read.
+
+    Assembled in code rather than written by a model. Every value here has
+    already been through triage, research or the calendar; asking a model to
+    restate them would be one more chance to invent something.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lead_id: str
+    company: str
+    domain: str
+    generated_at: datetime
+    claims: list[BriefClaim] = Field(default_factory=list)
+    upcoming_meeting: MeetingRef | None = None
+    talking_points: list[str] = Field(default_factory=list)
+    unknowns: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    status: Literal["draft", "approved", "rejected", "delivered"] = "draft"
+    approved_by: str = ""
+    approved_at: datetime | None = None
+
+    @property
+    def verified_claims(self) -> list[BriefClaim]:
+        return [c for c in self.claims if c.verified]
+
+    @property
+    def unverified_claims(self) -> list[BriefClaim]:
+        return [c for c in self.claims if c.value and not c.source_url]

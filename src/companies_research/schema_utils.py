@@ -31,6 +31,10 @@ UNSUPPORTED_KEYWORDS = frozenset(
 )
 
 
+class UnsupportedSchema(TypeError):
+    """A Pydantic model that structured outputs cannot enforce."""
+
+
 def _sanitize(node: Any) -> Any:
     if isinstance(node, dict):
         cleaned: dict[str, Any] = {}
@@ -43,9 +47,19 @@ def _sanitize(node: Any) -> Any:
                 if key == "properties" and isinstance(value, dict)
                 else _sanitize(value)
             )
-        if cleaned.get("type") == "object" and isinstance(cleaned.get("properties"), dict):
-            cleaned["additionalProperties"] = False
-            cleaned["required"] = list(cleaned["properties"].keys())
+        if cleaned.get("type") == "object":
+            if isinstance(cleaned.get("properties"), dict):
+                cleaned["additionalProperties"] = False
+                cleaned["required"] = list(cleaned["properties"].keys())
+            elif isinstance(cleaned.get("additionalProperties"), dict):
+                # An open-ended mapping — `dict[str, X]` in Pydantic. The API
+                # rejects any additionalProperties that is not false, so fail
+                # here with a message that names the fix rather than at the
+                # API with one that does not.
+                raise UnsupportedSchema(
+                    "structured outputs cannot express an open-ended object "
+                    "(dict[str, ...]); model it as a list of {key, value} objects"
+                )
         return cleaned
     if isinstance(node, list):
         return [_sanitize(item) for item in node]
