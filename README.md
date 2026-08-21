@@ -174,6 +174,37 @@ for a modest loss of depth — worth trying before raising either.
 Unlike triage, research never sees your mail: it takes a company name and a public
 domain, which is why it runs on a hosted model even when triage is local.
 
+## The tool harness
+
+Every capability the agent has — reading mail, searching the web, writing to the local
+store — goes through one chokepoint in
+[`tools/registry.py`](src/companies_research/tools/registry.py). Six gates run in a fixed
+order and each records a named boolean:
+
+```
+schema -> auth -> scopes -> rate_limit -> audit -> execute
+```
+
+The audit row is written **before** the tool runs, so a crash still leaves evidence of
+the attempt. A denial raises `ToolDenied`, which the caller turns into a structured
+refusal the model can read — it never ends a scan.
+
+```bash
+./start.sh tools              # scopes, tools, and the recent audit trail
+./start.sh tools --denied     # only refused calls
+```
+
+Why a gate and not a prompt filter: a filter is a model-level control, and model-level
+controls lose to model-level attacks. An injected instruction may well persuade the model
+to ask for a capability. It cannot grant the process a scope, because `TOOL_SCOPES` comes
+from `.env` and is never in the model's context. Revoke `research:read` and the hosted
+search tool is not even declared in the request — the capability is absent rather than
+discouraged.
+
+Argument models use `extra="forbid"` and carry identifiers only, never message bodies:
+the registry hashes the arguments and throws the values away, so an audit row can never
+become a second copy of your mail.
+
 ## Customising the prompts
 
 What makes a *useful* brief is a judgement call — it depends on your industry, your
