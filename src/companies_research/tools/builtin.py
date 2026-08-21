@@ -93,6 +93,38 @@ STORE_WRITE = ToolSpec(
 )
 
 
+class DeliverBriefArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief_id: str
+    recipient: str = Field(description="Where the brief is sent. Checked against ALLOWED_RECIPIENTS.")
+    note: str = Field(default="", max_length=2000)
+
+
+# Registered now, implemented in WO-06. It exists at this stage so the recipient
+# allow-list has a real tool to guard and the injection tests exercise a real
+# gate rather than a hypothetical one. `brief:deliver` is off by default, so a
+# call is refused at the scopes gate whatever the arguments say.
+DELIVER_BRIEF = ToolSpec(
+    name="deliver_brief",
+    args_model=DeliverBriefArgs,
+    requires_auth=False,
+    scopes=frozenset({"brief:deliver"}),
+    rate_limit_per_min=10,
+    side_effect=True,
+    description="Send an approved brief to a recipient.",
+)
+
+
+@tool(DELIVER_BRIEF)
+def deliver_brief(*, brief_id: str, recipient: str, note: str = "",
+                  _deliver: Any = None) -> Any:
+    if _deliver is None:
+        raise NotImplementedError(
+            "delivery is not implemented yet — WO-06 adds the DeliveryProvider"
+        )
+    return _deliver()
+
+
 @tool(WEB_SEARCH)
 def web_search(*, company: str = "", domain: str = "", max_uses: int = 1) -> bool:
     """Gate-only: permission to declare the hosted search tool for this lookup."""

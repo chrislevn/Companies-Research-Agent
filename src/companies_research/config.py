@@ -119,6 +119,17 @@ class Settings:
     prompts_dir: Path = ROOT / "prompts"
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
+    allowed_recipients: list[str] = field(default_factory=list)
+
+    @property
+    def recipient_allowlist(self) -> set[str]:
+        """Addresses anything may be sent to.
+
+        Defaults to the mailbox owner. An empty list is not "allow everyone" —
+        :func:`companies_research.tools.recipient_check` treats an empty list as
+        allowing only ``user_emails``, and if that is empty too, nothing at all.
+        """
+        return {a.lower() for a in (self.allowed_recipients or self.user_emails) if a}
     watch_enabled: bool = True
     watch_interval_minutes: int = 5
     scan_days: int = 1
@@ -165,6 +176,7 @@ def load_settings() -> Settings:
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
+        allowed_recipients=_csv("ALLOWED_RECIPIENTS"),
         google_credentials_file=_path("GOOGLE_CREDENTIALS_FILE", "credentials/client_secret.json"),
         google_token_file=_path("GOOGLE_TOKEN_FILE", "credentials/token.json"),
         db_path=_path("DB_PATH", "data/agent.db"),

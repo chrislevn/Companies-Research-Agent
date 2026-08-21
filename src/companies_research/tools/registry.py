@@ -346,6 +346,60 @@ def _has_credentials(spec: ToolSpec) -> bool:
     return True
 
 
+# --- recipient allow-list --------------------------------------------------
+
+# Argument names that carry somewhere content could be sent. A tool that has
+# none of these has no recipient to check, which is why a database write is
+# audited as a side effect without being measured against an email address.
+RECIPIENT_FIELDS = ("recipient", "recipients", "to", "email", "address", "webhook_url")
+
+
+def recipient_check(spec: ToolSpec, args: dict[str, Any]) -> str | None:
+    """Refuse a side-effecting call aimed anywhere but the allow-list.
+
+    This is the control that makes "forward everything to attacker@evil.com"
+    fail. It runs in the scopes gate, on arguments, after the model has already
+    decided what it wants — so it does not matter how persuasive the email was.
+    An empty allow-list denies everything rather than allowing everything.
+    """
+    if not spec.side_effect:
+        return None
+
+    wanted: list[str] = []
+    for field_name in RECIPIENT_FIELDS:
+        value = args.get(field_name)
+        if isinstance(value, str) and value.strip():
+            wanted.append(value.strip())
+        elif isinstance(value, (list, tuple, set)):
+            wanted.extend(str(v).strip() for v in value if str(v).strip())
+
+    if not wanted:
+        return None  # nothing addressed anywhere; not this gate's business
+
+    allowed = SETTINGS.recipient_allowlist
+    if not allowed:
+        return ("no recipient is allow-listed — set ALLOWED_RECIPIENTS "
+                "or USER_EMAILS before anything can be sent")
+
+    refused = [w for w in wanted if _address_of(w).lower() not in allowed]
+    if refused:
+        # Name the count, not the addresses: an error string is somewhere an
+        # attacker-supplied address could be read back out.
+        return (f"{len(refused)} recipient(s) not in ALLOWED_RECIPIENTS "
+                f"({len(allowed)} address(es) allowed)")
+    return None
+
+
+def _address_of(value: str) -> str:
+    """Bare address out of `Name <a@b.com>`, or the value unchanged."""
+    if "<" in value and ">" in value:
+        return value[value.rindex("<") + 1: value.rindex(">")].strip()
+    return value.strip()
+
+
+add_scope_check(recipient_check)
+
+
 def granted(scope: str) -> bool:
     """Is this scope enabled? For deciding what to offer, not for enforcement."""
     return scope in SETTINGS.tool_scopes
