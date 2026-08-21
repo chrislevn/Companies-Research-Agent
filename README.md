@@ -201,6 +201,25 @@ from `.env` and is never in the model's context. Revoke `research:read` and the 
 search tool is not even declared in the request — the capability is absent rather than
 discouraged.
 
+### Prompt injection
+
+Email content is attacker-controlled, so triage fences every field the sender
+wrote — name, address, subject, body and signature — inside an `<untrusted-…>`
+block whose id is random per call. A payload can write a closing tag, but it cannot
+guess the id, so it cannot close the block and start speaking in the model's voice.
+
+That narrows the attack surface; it does not close it. The boundary is the gate.
+Assume the injection *wins* and the model emits exactly the call the attacker asked
+for: `deliver_brief` to an outside address is still refused at the scopes gate,
+because `brief:deliver` is off and the address is not in `ALLOWED_RECIPIENTS` —
+neither of which is in the model's context to argue with.
+
+`tests/test_injection.py` covers 14 payloads (instruction override, credential and
+env exfiltration, fake tool calls, tool-name confusion, base64, homoglyphs,
+delimiter escape, Vietnamese, signature-hidden, multi-stage). Every test asserts the
+attempt was **denied at a named gate**, never that a filter matched a string — and
+the suite is mutation-tested: disabling either control makes it fail.
+
 Argument models use `extra="forbid"` and carry identifiers only, never message bodies:
 the registry hashes the arguments and throws the values away, so an audit row can never
 become a second copy of your mail.
