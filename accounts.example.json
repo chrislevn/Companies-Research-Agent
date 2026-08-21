@@ -1,0 +1,82 @@
+{
+  "$comment": [
+    "Only needed for more than one mailbox. Delete this file (or never create it)",
+    "and the agent runs in solo mode: one Gmail account taken from .env.",
+    "",
+    "Secrets are REFERENCES, never literals: 'env:NAME' reads an environment",
+    "variable, 'file:/path' reads a mounted secret. This file is safe to commit."
+  ],
+
+  "accounts": [
+    {
+      "account_id": "founder-gmail",
+      "provider": "gmail",
+      "email": "founder@startup.io",
+      "user_id": "founder",
+      "label": "Personal Gmail — browser consent once",
+      "auth": { "type": "oauth_desktop" }
+    },
+
+    {
+      "account_id": "sales-workspace",
+      "provider": "gmail",
+      "email": "sales@acme.com",
+      "user_id": "sales-team",
+      "label": "Google Workspace via domain-wide delegation",
+      "auth": {
+        "type": "service_account",
+        "key_json": "file:/run/secrets/gcp-sa-key.json",
+        "subject": "sales@acme.com"
+      }
+    },
+
+    {
+      "account_id": "bd-m365",
+      "provider": "microsoft",
+      "email": "bd@acme.com",
+      "user_id": "bd-team",
+      "label": "Microsoft 365 app-only. Scope Mail.Read with New-ApplicationAccessPolicy!",
+      "auth": {
+        "type": "client_credentials",
+        "tenant_id": "00000000-0000-0000-0000-000000000000",
+        "client_id": "11111111-1111-1111-1111-111111111111",
+        "client_secret": "env:MS_CLIENT_SECRET"
+      }
+    },
+
+    {
+      "account_id": "me-outlook",
+      "provider": "microsoft",
+      "email": "me@outlook.com",
+      "user_id": "founder",
+      "label": "Single Outlook mailbox, interactive device-code sign-in",
+      "auth": {
+        "type": "device_code",
+        "tenant_id": "common",
+        "client_id": "11111111-1111-1111-1111-111111111111"
+      }
+    },
+
+    {
+      "account_id": "ops-zoho",
+      "provider": "imap",
+      "email": "ops@acme.com",
+      "user_id": "ops-team",
+      "label": "Anything else — Zoho, Fastmail, iCloud, on-prem Exchange",
+      "auth": {
+        "host": "imap.zoho.com",
+        "port": 993,
+        "username": "ops@acme.com",
+        "password": "env:ZOHO_APP_PASSWORD"
+      },
+      "options": { "sent_folder": "Sent" }
+    },
+
+    {
+      "account_id": "legacy",
+      "provider": "imap",
+      "email": "old@acme.com",
+      "enabled": false
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+# Secrets & credentials
+.env
+.env.*
+!.env.example
+credentials/
+client_secret*.json
+token*.json
+msal-*.json
+
+# Carries no secrets (only env:/file: references) but does list internal
+# addresses — commit it deliberately, not by accident.
+accounts.json
+config/accounts.json
+!accounts.example.json
+
+# Local state
+data/
+out/
+*.db
+*.sqlite
+*.sqlite3
+eval_results.json
+
+# Prompts are user-editable and may carry internal detail or pasted secrets.
+# Share one deliberately by naming it *.example.md.
+prompts/*
+!prompts/*.example.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

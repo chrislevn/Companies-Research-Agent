@@ -1,0 +1,18 @@
+anthropic>=0.116.0
+httpx>=0.27.0
+pydantic>=2.7.0
+python-dotenv>=1.0.1
+
+# Local web interface
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# Gmail / Google Workspace
+google-api-python-client>=2.130.0
+google-auth>=2.30.0
+google-auth-oauthlib>=1.2.0
+
+# Microsoft 365 / Outlook (Graph)
+msal>=1.28.0
+
+# Generic IMAP uses the standard library (imaplib, email) — no extra dependency.
