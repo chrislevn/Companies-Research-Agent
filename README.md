@@ -18,7 +18,7 @@ use, and a command line for servers and scheduled jobs.
 | 4. Brief generation | ⬜ | Company profile, products, recent news, contact, meeting prep notes |
 | 5. Human approval | ⬜ | Review → forward by email or save to the knowledge base |
 
-This repo currently implements **steps 1 and 2**.
+This repo currently implements **steps 1, 2 and 3**.
 
 ---
 
@@ -82,6 +82,8 @@ python -m companies_research seed       # learn existing contacts, run once
 python -m companies_research scan --since 1d
 python -m companies_research research agora.io   # one company (--force to refresh)
 python -m companies_research research            # every lead not yet researched
+python -m companies_research calendar agora.io   # upcoming meetings with them
+python -m companies_research tools               # scopes, tools and the audit trail
 python -m companies_research prompts --show      # which prompts are in use
 python -m companies_research purge <user_id>
 ```
@@ -223,6 +225,34 @@ the suite is mutation-tested: disabling either control makes it fail.
 Argument models use `extra="forbid"` and carry identifiers only, never message bodies:
 the registry hashes the arguments and throws the values away, so an audit row can never
 become a second copy of your mail.
+
+## Calendar lookup (step 3)
+
+Reads the `calendar.readonly` scope that was already consented at sign-in, so there is
+no new permission to grant and no token to re-issue.
+
+```bash
+./start.sh calendar agora.io --name Agora
+```
+
+Matching is deliberately conservative, because a brief that invents a meeting is worse
+than one that mentions none:
+
+| Signal | Confidence | Why |
+|---|---|---|
+| Attendee shares the company's mail domain | 0.95 | All but conclusive |
+| Organizer shares it | 0.95 | Equally strong |
+| Company name appears in the event title | 0.55 | A guess — "Northwind sync" may be a project |
+
+Domain equality is checked in Python rather than handed to Calendar's free-text search,
+which would also match an event that merely mentions the domain in its description.
+Title matching requires a whole word, so "AI" does not match "Vietnam AIrlines".
+Consumer domains are refused outright — every `gmail.com` attendee would match.
+
+**"No meetings" and "could not look" are different answers.** `CalendarOutcome.checked`
+distinguishes them, and nothing ever guesses to fill the gap. A revoked `calendar:read`
+scope, a missing token or an API failure all return an unchecked outcome carrying the
+reason, so step 4 can render honestly instead of implying the diary is clear.
 
 ## Customising the prompts
 
