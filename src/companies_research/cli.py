@@ -142,6 +142,44 @@ def cmd_seed(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tools(args: argparse.Namespace) -> int:
+    """Show what the agent is permitted to do, and what it has actually done."""
+    from . import tools as harness
+    from .config import ALL_TOOL_SCOPES, SETTINGS
+
+    granted = SETTINGS.tool_scopes
+    print("Scopes")
+    for scope in sorted(ALL_TOOL_SCOPES):
+        mark = "on " if scope in granted else "OFF"
+        note = "  <- nothing leaves this machine until this is on" \
+            if scope == "brief:deliver" and scope not in granted else ""
+        print(f"  [{mark}] {scope}{note}")
+
+    print("\nTools")
+    for spec in harness.describe_registry():
+        state = "available" if spec["granted"] else "REFUSED (missing scope)"
+        effect = "writes/sends" if spec["side_effect"] else "read-only"
+        print(f"  {spec['name']:<14} {effect:<12} {spec['rate_limit_per_min']:>4}/min  "
+              f"{','.join(spec['scopes']):<16} {state}")
+
+    rows = Store().recent_tool_calls(limit=args.limit)
+    if not rows:
+        print("\nNo tool calls recorded yet.")
+        return 0
+
+    denials = [r for r in rows if r["denied_at"]]
+    print(f"\nLast {len(rows)} call(s) — {len(denials)} denied")
+    for row in rows:
+        if args.denied and not row["denied_at"]:
+            continue
+        gates = row["gate_results"]
+        trail = " ".join(f"{g[:4]}{'+' if ok else '!'}" for g, ok in gates.items())
+        verdict = f"DENIED at {row['denied_at']}" if row["denied_at"] else "ok"
+        print(f"  {row['ts'][11:19]}  {row['tool']:<12} {row['caller']:<18} "
+              f"{row['duration_ms']:>6}ms  {trail:<34} {verdict}")
+    return 0
+
+
 def _known_prompts() -> dict[str, str]:
     """Editable prompts, mapped to their built-in default."""
     from .agents.triage import SYSTEM_PROMPT as TRIAGE_DEFAULT
@@ -456,6 +494,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_research.add_argument("--limit", type=int, default=None, help="max companies this run")
     p_research.add_argument("--json", action="store_true", help="machine-readable output")
     p_research.set_defaults(func=cmd_research)
+
+    p_tools = sub.add_parser("tools", help="what the agent may do, and what it has done")
+    p_tools.add_argument("--limit", type=int, default=20, help="audit rows to show")
+    p_tools.add_argument("--denied", action="store_true", help="only refused calls")
+    p_tools.set_defaults(func=cmd_tools)
 
     p_prompts = sub.add_parser("prompts", help="show or customise the agent prompts")
     p_prompts.add_argument("name", nargs="?", help="research | triage (default: all)")

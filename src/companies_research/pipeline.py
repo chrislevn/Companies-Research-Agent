@@ -15,6 +15,7 @@ from .models import CompanyProfile, EmailMessage, TriageResult
 from .providers import Account, EmailProvider, Folder, MessageQuery, ProviderError, build_provider
 from .research.base import ResearchOutcome
 from .store import Store
+from . import tools
 
 if TYPE_CHECKING:  # only for annotations; the provider itself is imported lazily
     from .research.base import ResearchProvider
@@ -151,6 +152,7 @@ def scan(
     store = store or Store()
     report = ScanReport()
     say = progress or (lambda _msg: None)
+    tools.set_caller("pipeline.scan")
     # A dry run must not spend money on research either — it exists so the same
     # mail can be re-run freely while tuning.
     if research is None:
@@ -176,7 +178,19 @@ def scan(
         say(f"Reading mail from {account.email or account.account_id}")
         try:
             with build_provider(account) as provider:
-                messages = provider.fetch(query)
+                # Through the gate: a revoked mail:read scope refuses here and
+                # the scan carries on to the next account rather than dying.
+                messages = tools.gmail_read(
+                    account_id=account.account_id,
+                    folder=query.folder.value if query.folder else "inbox",
+                    max_results=max_results,
+                    query=raw_query or "",
+                    _fetch=lambda: provider.fetch(query),
+                )
+        except tools.ToolDenied as exc:
+            log.warning("[%s] mail read denied at %s", account.account_id, exc.gate)
+            report.errors.append(AccountError(account, f"denied at {exc.gate}: {exc.reason}"))
+            continue
         except ProviderError as exc:
             log.error("[%s] %s", account.account_id, exc)
             report.errors.append(AccountError(account, str(exc)))
@@ -256,15 +270,32 @@ def scan(
         report.triaged.append((message, result))
         if dry_run:
             continue
-        store.record_sender(
-            message,
-            user_id=account.user_id,
-            company_name=result.company_name,
-            relationship=result.relationship.value,
-        )
-        store.mark_processed(message, result, user_id=account.user_id)
+        try:
+            tools.store_write(
+                kind="processed_message",
+                key=message.uid,
+                user_id=account.user_id,
+                _write=lambda a=account, m=message, r=result: _persist_triage(store, a, m, r),
+            )
+        except tools.ToolDenied as exc:
+            # A refused write must not lose the scan: the result stays in the
+            # report, it simply is not remembered for next time.
+            log.warning("store_write denied at %s — %s not recorded", exc.gate, message.uid)
 
     return report
+
+
+def _persist_triage(
+    store: Store, account: Account, message: EmailMessage, result: TriageResult
+) -> None:
+    """The two writes one triaged message produces, as one auditable unit."""
+    store.record_sender(
+        message,
+        user_id=account.user_id,
+        company_name=result.company_name,
+        relationship=result.relationship.value,
+    )
+    store.mark_processed(message, result, user_id=account.user_id)
 
 
 def research_leads(
@@ -286,6 +317,7 @@ def research_leads(
 
     store = store or Store()
     say = progress or (lambda _msg: None)
+    tools.set_caller("pipeline.research")
     ttl = timedelta(days=SETTINGS.research_ttl_days)
     cap = limit if limit is not None else SETTINGS.research_max_companies
 
@@ -360,14 +392,20 @@ def research_leads(
         else:
             log.warning("  ✗ %s — %s (%.1fs)", domain, outcome.error, elapsed)
 
-        store.save_research(
-            domain,
-            outcome.profile,
-            company_name=result.company_name,
-            provider=researcher.name,
-            model=researcher.model,
-            error=outcome.error,
-        )
+        try:
+            tools.store_write(
+                kind="company_research",
+                key=domain,
+                _write=lambda d=domain, o=outcome, r=result: store.save_research(
+                    d, o.profile,
+                    company_name=r.company_name,
+                    provider=researcher.name,
+                    model=researcher.model,
+                    error=o.error,
+                ),
+            )
+        except tools.ToolDenied as exc:
+            log.warning("store_write denied at %s — %s not cached", exc.gate, domain)
         outcomes[domain] = outcome
         if report is not None:
             report.researched.append((domain, outcome))

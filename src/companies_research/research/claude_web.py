@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from .. import prompts
+from .. import tools as harness
 from ..config import SETTINGS
 from ..models import CompanyProfile
 from ..schema_utils import json_schema_for
@@ -93,10 +94,25 @@ class ClaudeWebResearch:
         if prompt.customised:
             log.info("  using custom research prompt (%s)", prompt.source)
 
-        tools = [
-            {**WEB_SEARCH_TOOL, "max_uses": self.max_searches},
-            {**WEB_FETCH_TOOL, "max_uses": self.max_searches},
-        ]
+        # Gate before declaring. A revoked research:read scope means the tool is
+        # never offered to the model, so no prompt can talk it into searching —
+        # the capability is absent rather than merely discouraged.
+        api_tools: list[dict[str, Any]] = []
+        try:
+            harness.web_search(company=company, domain=domain, max_uses=self.max_searches)
+            api_tools.append({**WEB_SEARCH_TOOL, "max_uses": self.max_searches})
+        except harness.ToolDenied as exc:
+            log.warning("web_search denied at %s: %s", exc.gate, exc.reason)
+        try:
+            harness.web_fetch(domain=domain, max_uses=self.max_searches)
+            api_tools.append({**WEB_FETCH_TOOL, "max_uses": self.max_searches})
+        except harness.ToolDenied as exc:
+            log.warning("web_fetch denied at %s: %s", exc.gate, exc.reason)
+
+        if not api_tools:
+            return ResearchOutcome(
+                error="research tools are not enabled (missing scope research:read)"
+            )
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": _render_request(company, domain, context)}
         ]
@@ -108,7 +124,7 @@ class ClaudeWebResearch:
                     model=self.model,
                     max_tokens=16000,
                     system=prompt.text,
-                    tools=tools,
+                    tools=api_tools,
                     output_config={
                         "format": {"type": "json_schema", "schema": json_schema_for(CompanyProfile)},
                         "effort": self.effort,
