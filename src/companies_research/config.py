@@ -7,6 +7,7 @@ SETTINGS`` and see the current values after :func:`reload_settings`.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,21 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
 ]
+
+# --- tool scopes -----------------------------------------------------------
+# What the agent is permitted to do, independent of what any prompt asks for.
+# An injected instruction may well persuade the model to call a tool; it cannot
+# grant itself the scope that tool needs, because this set comes from .env and
+# is never in the model's context.
+#
+# `brief:deliver` is deliberately absent from the default: nothing leaves this
+# machine until a human turns that on.
+ALL_TOOL_SCOPES = frozenset(
+    {"research:read", "mail:read", "calendar:read", "memory:write", "brief:deliver"}
+)
+DEFAULT_TOOL_SCOPES = frozenset(
+    {"research:read", "mail:read", "calendar:read", "memory:write"}
+)
 
 
 def _path(env_key: str, default: str) -> Path:
@@ -51,6 +67,25 @@ def _int(env_key: str, default: int, *, minimum: int = 1) -> int:
         return max(minimum, int(os.getenv(env_key, "") or default))
     except ValueError:
         return default
+
+
+def _scopes(env_key: str) -> frozenset[str]:
+    """Enabled tool scopes, defaulting to read-only plus local memory.
+
+    An unrecognised name is dropped with a warning rather than silently
+    granting nothing: a typo in ``TOOL_SCOPES`` should not quietly disable half
+    the agent, and it must never accidentally enable something either.
+    """
+    raw = (os.getenv(env_key) or "").strip()
+    if not raw:
+        return DEFAULT_TOOL_SCOPES
+    asked = {item.strip().lower() for item in raw.split(",") if item.strip()}
+    unknown = asked - ALL_TOOL_SCOPES
+    if unknown:
+        logging.getLogger(__name__).warning(
+            "Ignoring unknown scope(s) in %s: %s", env_key, ", ".join(sorted(unknown))
+        )
+    return frozenset(asked & ALL_TOOL_SCOPES)
 
 
 def _float(env_key: str, default: float, *, minimum: float = 1.0) -> float:
@@ -82,6 +117,8 @@ class Settings:
     research_max_companies: int = 10
     research_ttl_days: int = 14
     prompts_dir: Path = ROOT / "prompts"
+    tool_scopes: frozenset[str] = frozenset()
+    tool_audit_enabled: bool = True
     watch_enabled: bool = True
     watch_interval_minutes: int = 5
     scan_days: int = 1
@@ -126,6 +163,8 @@ def load_settings() -> Settings:
         research_max_companies=_int("RESEARCH_MAX_COMPANIES", 10),
         research_ttl_days=_int("RESEARCH_TTL_DAYS", 14),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
+        tool_scopes=_scopes("TOOL_SCOPES"),
+        tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
         google_credentials_file=_path("GOOGLE_CREDENTIALS_FILE", "credentials/client_secret.json"),
         google_token_file=_path("GOOGLE_TOKEN_FILE", "credentials/token.json"),
         db_path=_path("DB_PATH", "data/agent.db"),

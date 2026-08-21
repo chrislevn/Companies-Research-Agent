@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 # retrying it, and no longer — the cause is usually transient.
 FAILED_RESEARCH_TTL = timedelta(hours=6)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS known_senders (
@@ -80,6 +80,26 @@ CREATE TABLE IF NOT EXISTS company_research (
     profile_json   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_research_time ON company_research(researched_at);
+
+-- Every tool call, whether it ran or was refused. `args_hash` is a digest, not
+-- the arguments: this table is an audit trail, and an audit trail that copies
+-- email addresses and message bodies out of the database it is auditing is a
+-- second place for them to leak from.
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id            TEXT PRIMARY KEY,
+    ts            TEXT NOT NULL,
+    tool          TEXT NOT NULL,
+    caller        TEXT NOT NULL DEFAULT '',
+    args_hash     TEXT NOT NULL DEFAULT '',
+    gate_results  TEXT NOT NULL DEFAULT '{}',
+    denied_at     TEXT,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    ok            INTEGER NOT NULL DEFAULT 0,
+    error         TEXT,
+    trace_id      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_ts ON tool_calls(ts);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool, denied_at);
 """
 
 
@@ -111,9 +131,10 @@ class Store:
     def _migrate(self, conn: sqlite3.Connection) -> None:
         """v1 (single-user, Gmail-only) → v2 (multi-user, multi-provider).
 
-        v2 → v3 only adds ``company_research``, which the ``CREATE TABLE IF NOT
-        EXISTS`` in :data:`SCHEMA` handles on its own — no data to move, so this
-        returns early for a v2 database and lets SCHEMA do the work.
+        v2 → v3 adds ``company_research`` and v3 → v4 adds ``tool_calls``. Both
+        are pure additions, which the ``CREATE TABLE IF NOT EXISTS`` statements
+        in :data:`SCHEMA` handle on their own — no data to move, so this returns
+        early for a v2-or-later database and lets SCHEMA do the work.
         """
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         if version >= SCHEMA_VERSION:
@@ -294,6 +315,85 @@ class Store:
                     triage.model_dump_json() if triage else None,
                 ),
             )
+
+    # ---------- tool audit ----------
+
+    def open_tool_call(
+        self,
+        *,
+        call_id: str,
+        tool: str,
+        caller: str,
+        args_hash: str,
+        gate_results: dict[str, bool],
+        trace_id: str = "",
+    ) -> None:
+        """Write the audit row *before* the tool runs.
+
+        Recorded first so that a crash, a kill or a hang still leaves evidence
+        that the call was attempted. A row with ``ok = 0`` and no error is a
+        call that never came back.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO tool_calls
+                    (id, ts, tool, caller, args_hash, gate_results, denied_at,
+                     duration_ms, ok, error, trace_id)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, 0, 0, NULL, ?)
+                """,
+                # Not sort_keys: insertion order *is* the gate sequence, and an
+                # audit row that shows the order they ran in is worth more than
+                # one that is alphabetised.
+                (call_id, _now(), tool, caller, args_hash,
+                 json.dumps(gate_results), trace_id),
+            )
+
+    def close_tool_call(
+        self,
+        call_id: str,
+        *,
+        gate_results: dict[str, bool],
+        denied_at: str | None,
+        duration_ms: int,
+        ok: bool,
+        error: str | None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE tool_calls
+                   SET gate_results = ?, denied_at = ?, duration_ms = ?, ok = ?, error = ?
+                 WHERE id = ?
+                """,
+                (json.dumps(gate_results), denied_at,
+                 duration_ms, 1 if ok else 0, error, call_id),
+            )
+
+    def recent_tool_calls(self, *, limit: int = 100, tool: str | None = None) -> list[dict]:
+        sql = "SELECT * FROM tool_calls"
+        params: list[object] = []
+        if tool:
+            sql += " WHERE tool = ?"
+            params.append(tool)
+        sql += " ORDER BY ts DESC LIMIT ?"
+        params.append(max(limit, 1))
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        out = []
+        for row in rows:
+            record = dict(row)
+            record["ok"] = bool(row["ok"])
+            try:
+                record["gate_results"] = json.loads(row["gate_results"])
+            except (TypeError, ValueError):
+                record["gate_results"] = {}
+            out.append(record)
+        return out
+
+    def tool_call_count(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) AS n FROM tool_calls").fetchone()["n"]
 
     # ---------- company research ----------
 
