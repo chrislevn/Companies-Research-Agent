@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -102,6 +103,24 @@ class TriageBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     results: list[TriageResult]
+
+
+class MeetingRef(BaseModel):
+    """An upcoming calendar event that looks like it involves this company.
+
+    ``matched_on`` is kept because *why* an event matched decides how much to
+    trust it: sharing an attendee domain is near-certain, a company name in a
+    title is a guess that a brief should present as one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str
+    title: str = ""
+    starts_at: datetime
+    attendees: list[str] = Field(default_factory=list)
+    matched_on: Literal["attendee_domain", "organizer_domain", "title_mention"]
+    confidence: float = Field(ge=0.0, le=1.0)
 
 
 class NewsItem(BaseModel):

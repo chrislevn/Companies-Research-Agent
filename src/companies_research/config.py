@@ -116,10 +116,20 @@ class Settings:
     research_max_searches: int = 8
     research_max_companies: int = 10
     research_ttl_days: int = 14
+    calendar_enabled: bool = True
+    calendar_provider: str = "google"
+    calendar_lookahead_days: int = 30
     prompts_dir: Path = ROOT / "prompts"
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
     allowed_recipients: list[str] = field(default_factory=list)
+    watch_enabled: bool = True
+    watch_interval_minutes: int = 5
+    scan_days: int = 1
+    user_emails: list[str] = field(default_factory=list)
+    ignored_domains: list[str] = field(default_factory=list)
+
+    # -- derived views; every field is declared above this line ----------
 
     @property
     def recipient_allowlist(self) -> set[str]:
@@ -130,11 +140,6 @@ class Settings:
         allowing only ``user_emails``, and if that is empty too, nothing at all.
         """
         return {a.lower() for a in (self.allowed_recipients or self.user_emails) if a}
-    watch_enabled: bool = True
-    watch_interval_minutes: int = 5
-    scan_days: int = 1
-    user_emails: list[str] = field(default_factory=list)
-    ignored_domains: list[str] = field(default_factory=list)
 
     @property
     def user_domains(self) -> set[str]:
@@ -173,6 +178,11 @@ def load_settings() -> Settings:
         # companies. The rest wait for the next run.
         research_max_companies=_int("RESEARCH_MAX_COMPANIES", 10),
         research_ttl_days=_int("RESEARCH_TTL_DAYS", 14),
+        calendar_enabled=_bool("CALENDAR_ENABLED", True),
+        calendar_provider=os.getenv("CALENDAR_PROVIDER", "google"),
+        # A month is far enough ahead to be worth preparing for and short enough
+        # that a standing weekly invite does not drown the real meeting.
+        calendar_lookahead_days=_int("CALENDAR_LOOKAHEAD_DAYS", 30),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
