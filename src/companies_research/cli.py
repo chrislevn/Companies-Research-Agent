@@ -142,6 +142,30 @@ def cmd_seed(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_brief(args: argparse.Namespace) -> int:
+    """Assemble and render a brief for one company."""
+    from .briefs import generate, to_html, to_markdown
+
+    store = Store()
+    brief = generate(domain=args.domain, store=store,
+                     refresh_calendar=not args.no_calendar)
+    if brief is None:
+        print(f"No triaged lead found for {args.domain!r}. Run a scan first.")
+        return 1
+
+    if not args.no_save:
+        brief_id = store.save_brief(brief)
+        print(f"(saved as {brief_id})\n", file=sys.stderr)
+
+    if args.json:
+        print(brief.model_dump_json(indent=2))
+    elif args.html:
+        print(to_html(brief))
+    else:
+        print(to_markdown(brief))
+    return 0
+
+
 def cmd_calendar(args: argparse.Namespace) -> int:
     """Look for upcoming meetings with one company."""
     from .calendars import look_up
@@ -534,6 +558,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_research.add_argument("--limit", type=int, default=None, help="max companies this run")
     p_research.add_argument("--json", action="store_true", help="machine-readable output")
     p_research.set_defaults(func=cmd_research)
+
+    p_brief = sub.add_parser("brief", help="assemble a brief for one company")
+    p_brief.add_argument("domain", help="company domain, e.g. agora.io")
+    p_brief.add_argument("--html", action="store_true", help="render HTML instead of markdown")
+    p_brief.add_argument("--json", action="store_true", help="machine-readable output")
+    p_brief.add_argument("--no-calendar", action="store_true", help="skip the calendar lookup")
+    p_brief.add_argument("--no-save", action="store_true", help="render without persisting")
+    p_brief.set_defaults(func=cmd_brief)
 
     p_cal = sub.add_parser("calendar", help="upcoming meetings with a company")
     p_cal.add_argument("domain", nargs="?", default="", help="company domain, e.g. agora.io")

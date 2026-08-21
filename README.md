@@ -18,7 +18,7 @@ use, and a command line for servers and scheduled jobs.
 | 4. Brief generation | ⬜ | Company profile, products, recent news, contact, meeting prep notes |
 | 5. Human approval | ⬜ | Review → forward by email or save to the knowledge base |
 
-This repo currently implements **steps 1, 2 and 3**.
+This repo currently implements **steps 1 to 4**.
 
 ---
 
@@ -82,6 +82,7 @@ python -m companies_research seed       # learn existing contacts, run once
 python -m companies_research scan --since 1d
 python -m companies_research research agora.io   # one company (--force to refresh)
 python -m companies_research research            # every lead not yet researched
+python -m companies_research brief agora.io      # assemble the brief (--html, --json)
 python -m companies_research calendar agora.io   # upcoming meetings with them
 python -m companies_research tools               # scopes, tools and the audit trail
 python -m companies_research prompts --show      # which prompts are in use
@@ -253,6 +254,37 @@ Consumer domains are refused outright — every `gmail.com` attendee would match
 distinguishes them, and nothing ever guesses to fill the gap. A revoked `calendar:read`
 scope, a missing token or an API failure all return an unchecked outcome carrying the
 reason, so step 4 can render honestly instead of implying the diary is clear.
+
+## Brief generation (step 4)
+
+```bash
+./start.sh brief agora.io            # markdown (canonical)
+./start.sh brief agora.io --html     # for the webapp
+```
+
+**No model runs here.** Triage, research and the calendar have each done their work and
+been validated; asking a model to restate them would be one more chance to invent
+something, for no gain. Assembly is deterministic and therefore testable offline.
+
+One rule governs the whole step: **a brief never asserts more than it can show.**
+
+- Every value becomes a claim carrying the URL that supports it. Research attributes each
+  finding to the single page it was read on (`field_sources`), and news items carry their
+  own links.
+- A claim with no source is **rendered as unverified and counted in `unknowns`** — never
+  hidden, because a reader who cannot tell which lines are evidenced assumes all of them
+  are.
+- **Talking points come only from sourced claims.** A talking point is what someone
+  repeats out loud in a meeting, which makes it the worst possible place for an unsourced
+  assertion. Unattributed prep still appears, under its own "unverified" heading.
+- Empty fields are **named, not filled**. If headcount could not be established the brief
+  says so.
+- "No meetings" and "could not look" stay distinct all the way through, and an email that
+  mentions a meeting with nothing matching in the diary is called out — usually the most
+  useful line in the document.
+
+Approved and delivered briefs are never overwritten by a regenerated draft: what somebody
+approved has to stay what they approved.
 
 ## Customising the prompts
 
