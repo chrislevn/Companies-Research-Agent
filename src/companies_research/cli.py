@@ -142,6 +142,46 @@ def cmd_seed(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_calendar(args: argparse.Namespace) -> int:
+    """Look for upcoming meetings with one company."""
+    from .calendars import look_up
+
+    outcome = look_up(
+        domain=args.domain, company=args.name, lookahead_days=args.days
+    )
+
+    if args.json:
+        print(json.dumps(
+            {
+                "domain": args.domain,
+                "checked": outcome.checked,
+                "reason": outcome.reason,
+                "events_scanned": outcome.events_scanned,
+                "lookahead_days": outcome.lookahead_days,
+                "meetings": [m.model_dump(mode="json") for m in outcome.meetings],
+            },
+            ensure_ascii=False, indent=2,
+        ))
+        return 0
+
+    print(f"\n{args.domain or args.name} — {outcome.summary()}")
+    if not outcome.checked:
+        # Not an error: a brief still renders, it just says nobody looked.
+        print(f"  (scanned nothing; {outcome.reason})")
+        return 0
+    print(f"  scanned {outcome.events_scanned} event(s) in the next "
+          f"{outcome.lookahead_days} day(s)")
+    for meeting in outcome.meetings:
+        print(f"\n  {meeting.starts_at:%a %d %b %Y %H:%M}  {meeting.title or '(no title)'}")
+        print(f"    matched on {meeting.matched_on.replace('_', ' ')} "
+              f"(confidence {meeting.confidence:.2f})")
+        if meeting.attendees:
+            shown = ", ".join(meeting.attendees[:5])
+            more = f" +{len(meeting.attendees) - 5} more" if len(meeting.attendees) > 5 else ""
+            print(f"    attendees: {shown}{more}")
+    return 0
+
+
 def cmd_tools(args: argparse.Namespace) -> int:
     """Show what the agent is permitted to do, and what it has actually done."""
     from . import tools as harness
@@ -494,6 +534,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_research.add_argument("--limit", type=int, default=None, help="max companies this run")
     p_research.add_argument("--json", action="store_true", help="machine-readable output")
     p_research.set_defaults(func=cmd_research)
+
+    p_cal = sub.add_parser("calendar", help="upcoming meetings with a company")
+    p_cal.add_argument("domain", nargs="?", default="", help="company domain, e.g. agora.io")
+    p_cal.add_argument("--name", default="", help="company name, for the weaker title match")
+    p_cal.add_argument("--days", type=int, default=None, help="lookahead window")
+    p_cal.add_argument("--json", action="store_true", help="machine-readable output")
+    p_cal.set_defaults(func=cmd_calendar)
 
     p_tools = sub.add_parser("tools", help="what the agent may do, and what it has done")
     p_tools.add_argument("--limit", type=int, default=20, help="audit rows to show")

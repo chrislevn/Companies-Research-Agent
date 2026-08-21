@@ -93,6 +93,13 @@ STORE_WRITE = ToolSpec(
 )
 
 
+class CalendarReadArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    domain: str = Field(default="", description="Company domain to match attendees against.")
+    company: str = Field(default="", description="Company name, for the weaker title match.")
+    lookahead_days: int = Field(default=30, ge=1, le=365)
+
+
 class DeliverBriefArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
     brief_id: str
@@ -113,6 +120,25 @@ DELIVER_BRIEF = ToolSpec(
     side_effect=True,
     description="Send an approved brief to a recipient.",
 )
+
+
+CALENDAR_READ = ToolSpec(
+    name="calendar_read",
+    args_model=CalendarReadArgs,
+    requires_auth=True,
+    scopes=frozenset({"calendar:read"}),
+    rate_limit_per_min=30,
+    side_effect=False,
+    description="List upcoming events that involve a company.",
+)
+
+
+@tool(CALENDAR_READ)
+def calendar_read(*, domain: str = "", company: str = "", lookahead_days: int = 30,
+                  _look: Any = None) -> Any:
+    if _look is None:
+        raise ValueError("calendar_read requires a _look dependency")
+    return _look()
 
 
 @tool(DELIVER_BRIEF)

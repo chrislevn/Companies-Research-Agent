@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from .builtin import deliver_brief, gmail_read, store_write, web_fetch, web_search
+from .builtin import (
+    calendar_read,
+    deliver_brief,
+    gmail_read,
+    store_write,
+    web_fetch,
+    web_search,
+)
 from .registry import (
     GATES,
     REGISTRY,
@@ -27,6 +34,7 @@ __all__ = [
     "ToolSpec",
     "add_scope_check",
     "caller",
+    "calendar_read",
     "canonical_args_hash",
     "deliver_brief",
     "describe_registry",
