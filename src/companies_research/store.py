@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,7 +29,7 @@ log = logging.getLogger(__name__)
 # retrying it, and no longer — the cause is usually transient.
 FAILED_RESEARCH_TTL = timedelta(hours=6)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS known_senders (
@@ -98,6 +99,23 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     error         TEXT,
     trace_id      TEXT NOT NULL DEFAULT ''
 );
+-- One row per generated brief. `brief_json` is the whole document, so an
+-- approved brief is exactly what the approver saw rather than something
+-- re-assembled later from sources that may since have changed.
+CREATE TABLE IF NOT EXISTS briefs (
+    id            TEXT PRIMARY KEY,
+    lead_id       TEXT NOT NULL DEFAULT '',
+    domain        TEXT NOT NULL DEFAULT '',
+    company       TEXT NOT NULL DEFAULT '',
+    generated_at  TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'draft',
+    approved_by   TEXT NOT NULL DEFAULT '',
+    approved_at   TEXT,
+    brief_json    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_briefs_status ON briefs(status, generated_at);
+CREATE INDEX IF NOT EXISTS idx_briefs_domain ON briefs(domain);
+
 CREATE INDEX IF NOT EXISTS idx_tool_calls_ts ON tool_calls(ts);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool, denied_at);
 """
@@ -131,8 +149,8 @@ class Store:
     def _migrate(self, conn: sqlite3.Connection) -> None:
         """v1 (single-user, Gmail-only) → v2 (multi-user, multi-provider).
 
-        v2 → v3 adds ``company_research`` and v3 → v4 adds ``tool_calls``. Both
-        are pure additions, which the ``CREATE TABLE IF NOT EXISTS`` statements
+        v2 → v3 adds ``company_research``, v3 → v4 adds ``tool_calls`` and
+        v4 → v5 adds ``briefs``. All three are pure additions, which the ``CREATE TABLE IF NOT EXISTS`` statements
         in :data:`SCHEMA` handle on their own — no data to move, so this returns
         early for a v2-or-later database and lets SCHEMA do the work.
         """
@@ -395,6 +413,90 @@ class Store:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) AS n FROM tool_calls").fetchone()["n"]
 
+    # ---------- briefs ----------
+
+    def save_brief(self, brief) -> str:
+        """Persist a brief, replacing any earlier draft for the same lead.
+
+        An approved or delivered brief is never overwritten by a regenerated
+        draft: what somebody approved has to stay what they approved.
+        """
+        existing = self.get_brief_by_lead(brief.lead_id)
+        if existing and existing["status"] in ("approved", "delivered"):
+            log.info("Not replacing %s brief for %s", existing["status"], brief.lead_id)
+            return existing["id"]
+
+        brief_id = existing["id"] if existing else uuid.uuid4().hex[:16]
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO briefs
+                    (id, lead_id, domain, company, generated_at, status,
+                     approved_by, approved_at, brief_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (brief_id, brief.lead_id, brief.domain, brief.company,
+                 brief.generated_at.isoformat(), brief.status, brief.approved_by,
+                 brief.approved_at.isoformat() if brief.approved_at else None,
+                 brief.model_dump_json()),
+            )
+        return brief_id
+
+    def get_brief(self, brief_id: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM briefs WHERE id = ?", (brief_id,)).fetchone()
+        return self._brief_row(row)
+
+    def get_brief_by_lead(self, lead_id: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM briefs WHERE lead_id = ? ORDER BY generated_at DESC LIMIT 1",
+                (lead_id,),
+            ).fetchone()
+        return self._brief_row(row)
+
+    def list_briefs(self, *, status: str | None = None, limit: int = 100) -> list[dict]:
+        sql = "SELECT * FROM briefs"
+        params: list[object] = []
+        if status:
+            sql += " WHERE status = ?"
+            params.append(status)
+        sql += " ORDER BY generated_at DESC LIMIT ?"
+        params.append(max(limit, 1))
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [r for r in (self._brief_row(row) for row in rows) if r]
+
+    def set_brief_status(self, brief_id: str, status: str, *, approved_by: str = "") -> bool:
+        record = self.get_brief(brief_id)
+        if record is None:
+            return False
+        brief = record["brief"]
+        brief["status"] = status
+        stamp = _now() if status in ("approved", "rejected") else record["approved_at"]
+        if status in ("approved", "rejected"):
+            brief["approved_by"] = approved_by
+            brief["approved_at"] = stamp
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE briefs SET status = ?, approved_by = ?, approved_at = ?, "
+                "brief_json = ? WHERE id = ?",
+                (status, approved_by or record["approved_by"], stamp,
+                 json.dumps(brief), brief_id),
+            )
+        return True
+
+    @staticmethod
+    def _brief_row(row) -> dict | None:
+        if row is None:
+            return None
+        record = dict(row)
+        try:
+            record["brief"] = json.loads(row["brief_json"])
+        except (TypeError, ValueError):
+            record["brief"] = None
+        return record
+
     # ---------- company research ----------
 
     def get_research(self, domain: str, *, max_age: timedelta | None = None) -> dict | None:
@@ -444,6 +546,27 @@ class Store:
         key = (domain or "").strip().lower()
         if not key:
             return
+
+        # A failed lookup must not destroy a good profile. Research can fail for
+        # reasons that have nothing to do with the company — a rate limit, a
+        # rejected schema, a network blip — and losing a working brief to a
+        # transient error is a far worse outcome than serving one that is a few
+        # hours stale. Record the failure, keep the evidence.
+        if profile is None:
+            existing = self.get_research(key)
+            if existing and existing.get("profile"):
+                log.warning(
+                    "Keeping the cached profile for %s; this lookup failed: %s",
+                    key, error or "unknown error",
+                )
+                with self._connect() as conn:
+                    conn.execute(
+                        "UPDATE company_research SET error = ?, researched_at = ? "
+                        "WHERE domain = ?",
+                        (error, _now(), key),
+                    )
+                return
+
         with self._connect() as conn:
             conn.execute(
                 """
