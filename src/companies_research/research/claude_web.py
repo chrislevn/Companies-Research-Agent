@@ -46,6 +46,12 @@ Rules:
   not find something, leave the field empty. An empty field is useful; an
   invented one destroys trust in the whole brief.
 - Put every URL you relied on in `sources`.
+- `field_sources` maps each finding to the ONE page that supports it — the page
+  you actually read it on, not the company's homepage by default. A brief shows
+  these links next to each claim, and a claim you cannot attribute to a single
+  page is shown to the reader as unverified. Omit the field rather than guess:
+  a wrong attribution is worse than an honest gap, because it invites someone
+  to click through and find nothing.
 - `news` is for genuinely recent and relevant items — funding, launches,
   leadership changes, expansion, notable customers. Skip press-release filler
   and anything older than about a year unless it is still what defines them.
