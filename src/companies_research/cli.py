@@ -24,7 +24,10 @@ import json
 import logging
 import re
 import sys
+from pathlib import Path as _Path
 from datetime import datetime, timedelta, timezone
+
+ROOT_DIR = _Path(__file__).resolve().parents[2]
 
 from .accounts import AccountsError, accounts_file, load_accounts
 from .pipeline import LAST_SCAN_KEY, ScanReport, new_mail_since, scan, seed_known_senders
@@ -204,6 +207,22 @@ def cmd_calendar(args: argparse.Namespace) -> int:
             more = f" +{len(meeting.attendees) - 5} more" if len(meeting.attendees) > 5 else ""
             print(f"    attendees: {shown}{more}")
     return 0
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Score the agent against recorded fixtures. Offline unless --record."""
+    import sys as _sys
+
+    root = ROOT_DIR / "tests"
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    from eval.run import run
+
+    report = run(live=args.record, only=args.only)
+    if not report:
+        return 1
+    # A false positive on the negative class is the failure worth failing on.
+    return 1 if report["negative_class"]["false_positives"] else 0
 
 
 def cmd_tools(args: argparse.Namespace) -> int:
@@ -573,6 +592,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_cal.add_argument("--days", type=int, default=None, help="lookahead window")
     p_cal.add_argument("--json", action="store_true", help="machine-readable output")
     p_cal.set_defaults(func=cmd_calendar)
+
+    p_eval = sub.add_parser("eval", help="score the agent against recorded fixtures")
+    p_eval.add_argument("--record", action="store_true",
+                        help="re-run live against the API and update the recordings")
+    p_eval.add_argument("--only", default=None,
+                        help="one class: lead | hard | negative | injection")
+    p_eval.set_defaults(func=cmd_eval)
 
     p_tools = sub.add_parser("tools", help="what the agent may do, and what it has done")
     p_tools.add_argument("--limit", type=int, default=20, help="audit rows to show")

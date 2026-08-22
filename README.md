@@ -85,6 +85,7 @@ python -m companies_research research            # every lead not yet researched
 python -m companies_research brief agora.io      # assemble the brief (--html, --json)
 python -m companies_research calendar agora.io   # upcoming meetings with them
 python -m companies_research tools               # scopes, tools and the audit trail
+python -m companies_research eval                # score against recorded fixtures
 python -m companies_research prompts --show      # which prompts are in use
 python -m companies_research purge <user_id>
 ```
@@ -360,6 +361,33 @@ views of the same event.
 
 Both libraries are optional: without them the agent runs exactly as before, just
 unmeasured.
+
+## Evaluation
+
+```bash
+./start.sh eval             # offline, free, ~0.1s
+./start.sh eval --record    # live: re-runs the API and updates the recordings
+```
+
+30 fixtures — 10 straightforward leads, 10 hard cases, 7 negatives, 3 injections. Real
+inbox structure, invented people and companies.
+
+**Scoring is per-field and binary.** A 1-10 quality score from a model judge looks
+precise and is not: score the same output twice and you get different numbers, and nobody
+can say what separates a 6 from a 7. "Did it get the domain right — yes or no" has an
+answer. Every field shows a numerator *and* a denominator, so a field only some fixtures
+can exercise reports `4/4`, not a rate quietly computed against 30.
+
+**The negative class is reported separately** and is the number that matters most. A
+false positive on a bank receipt costs a research call and somebody's afternoon; an
+average that mixes it with a strong lead score would hide it. `./start.sh eval` exits
+non-zero if any non-lead is called a lead.
+
+**How it runs offline.** The model's answer is recorded once against the live API and
+replayed from then on, while everything around it — prompt assembly, the untrusted-content
+fence, schema validation, parsing, the never-drop-a-message fallback — runs for real. So
+it catches regressions in *our* code for free. It does **not** measure model drift;
+re-record for that.
 
 ## Customising the prompts
 
