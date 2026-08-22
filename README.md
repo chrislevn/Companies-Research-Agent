@@ -18,7 +18,7 @@ use, and a command line for servers and scheduled jobs.
 | 4. Brief generation | ⬜ | Company profile, products, recent news, contact, meeting prep notes |
 | 5. Human approval | ⬜ | Review → forward by email or save to the knowledge base |
 
-This repo currently implements **steps 1 to 4**.
+All five steps are implemented.
 
 ---
 
@@ -285,6 +285,37 @@ One rule governs the whole step: **a brief never asserts more than it can show.*
 
 Approved and delivered briefs are never overwritten by a regenerated draft: what somebody
 approved has to stay what they approved.
+
+## Approval and delivery (step 5)
+
+Briefs land in **Review** in the web interface. Nothing auto-sends.
+
+The screen is built for someone tired at the end of the day: the brief on the left, its
+sources on the right so verification is a glance rather than a scroll, and everything
+doubtful — unverified claims, named gaps — flagged rather than smoothed over. A banner
+says what approving will actually *do* before the click, because "saves a file" and
+"emails a third party" deserve different hesitation.
+
+**The recipient gets its own confirmed block**, and the dropdown only ever contains
+addresses from `ALLOWED_RECIPIENTS`. That field is precisely what an injected instruction
+tries to change, so it is never pre-filled from anything a model produced.
+
+### Two things this step deliberately cannot do
+
+**The mailbox it reads is never the mailbox it sends from.** `GOOGLE_SCOPES` stays
+`gmail.readonly`. Sending requires `DELIVERY_PROVIDER=gmail_send` plus a separate
+`DELIVERY_ACCOUNT` with its own consent, and pointing that at a mailbox the agent reads is
+refused at startup. An agent that reads untrusted mail and can send from the same box is a
+mail relay with a language model choosing the recipient.
+
+**Approval is not authority to send.** A human clicking approve is a record that they read
+it. Whether the brief may then leave, and to whom, is the gate's decision — `brief:deliver`
+and `ALLOWED_RECIPIENTS` are checked on every delivery attempt, not inherited from the
+click. With the default configuration approving records the decision and stops there.
+
+Approved and delivered briefs move forward only: re-approving a delivered brief would
+quietly erase the record that it was sent. And an approval never promotes a claim into the
+research cache — somebody clicked a button, which is not evidence the claim is true.
 
 ## Customising the prompts
 
