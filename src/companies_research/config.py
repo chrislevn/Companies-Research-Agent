@@ -44,6 +44,25 @@ DEFAULT_TOOL_SCOPES = frozenset(
 )
 
 
+# --- list prices, USD per million tokens -----------------------------------
+# Published rates, matched by longest prefix so a dated id still prices. These
+# are list prices: any negotiated rate is unknowable from here, so every figure
+# the agent reports is an upper bound rather than an invoice.
+PRICING: dict[str, tuple[float, float]] = {
+    "claude-fable-5":   (10.00, 50.00),
+    "claude-mythos-5":  (10.00, 50.00),
+    "claude-opus-5":    (5.00, 25.00),
+    "claude-opus-4-8":  (5.00, 25.00),
+    "claude-opus-4-7":  (5.00, 25.00),
+    "claude-opus-4-6":  (5.00, 25.00),
+    "claude-sonnet-5":  (3.00, 15.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+}
+# Server-side web search, per search. Local models cost nothing and price at 0.
+SEARCH_COST_USD = 10.0 / 1000
+
+
 def _path(env_key: str, default: str) -> Path:
     raw = os.getenv(env_key, default)
     p = Path(raw)
@@ -122,6 +141,11 @@ class Settings:
     delivery_provider: str = "file"
     delivery_account: str = ""
     delivery_dir: Path = ROOT / "out" / "briefs"
+    metrics_enabled: bool = True
+    metrics_port: int = 9464
+    metrics_host: str = "127.0.0.1"
+    tracing_enabled: bool = False
+    otlp_endpoint: str = "http://localhost:4318/v1/traces"
     prompts_dir: Path = ROOT / "prompts"
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
@@ -196,6 +220,15 @@ def load_settings() -> Settings:
         delivery_provider=os.getenv("DELIVERY_PROVIDER", "file"),
         delivery_account=os.getenv("DELIVERY_ACCOUNT", ""),
         delivery_dir=_path("DELIVERY_DIR", "out/briefs"),
+        metrics_enabled=_bool("METRICS_ENABLED", True),
+        # Its own port, not the web interface's: the UI is token-gated and
+        # Prometheus cannot present a token.
+        metrics_port=_int("METRICS_PORT", 9464),
+        # 127.0.0.1 like everything else here. Prometheus in a container cannot
+        # reach that, so scraping from Docker needs 0.0.0.0 set deliberately.
+        metrics_host=os.getenv("METRICS_HOST", "127.0.0.1"),
+        tracing_enabled=_bool("TRACING_ENABLED", False),
+        otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4318/v1/traces"),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),

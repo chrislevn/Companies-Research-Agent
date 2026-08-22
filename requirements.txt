@@ -16,3 +16,9 @@ google-auth-oauthlib>=1.2.0
 msal>=1.28.0
 
 # Generic IMAP uses the standard library (imaplib, email) — no extra dependency.
+
+# Observability (optional — the agent runs without these, just unmeasured)
+prometheus-client>=0.20.0
+opentelemetry-sdk>=1.25.0
+opentelemetry-exporter-otlp-proto-http>=1.25.0
+pyyaml>=6.0
