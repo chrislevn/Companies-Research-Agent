@@ -317,6 +317,50 @@ Approved and delivered briefs move forward only: re-approving a delivered brief 
 quietly erase the record that it was sent. And an approval never promotes a claim into the
 research cache — somebody clicked a button, which is not evidence the claim is true.
 
+## Watching it run
+
+```bash
+METRICS_HOST=0.0.0.0 ./start.sh     # so the container can scrape the host
+docker compose up -d                # then open http://localhost:3000
+```
+
+Grafana comes up with the dashboard already loaded — six rows: scan overview,
+per-agent success rate, tool-gate denials by gate, latency by stage, cost per brief,
+and recent traces. It is provisioned from `grafana/dashboards/agent.json`, because a
+dashboard that only exists in somebody's browser is a dashboard that does not exist.
+
+**Nearly all of it emits from the tool gate.** That is the payoff of routing every
+capability through one chokepoint: instrumentation went in at a single site rather than
+being scattered through the pipeline. An injection attempt shows up as a live bar on the
+denials panel, labelled with the gate that refused it.
+
+| Metric | What it answers |
+|---|---|
+| `agent_tool_calls_total{tool,caller,outcome}` | Which stage is failing, not just that something is |
+| `agent_tool_denied_total{tool,gate}` | What was refused and by which gate |
+| `agent_tool_duration_seconds{tool}` | |
+| `agent_llm_tokens_total{model,kind}` | |
+| `agent_llm_cost_usd_total{model,stage}` | Where the money goes — research dominates |
+| `agent_stage_duration_seconds{stage}` | |
+| `agent_brief_cost_usd` | |
+| `agent_scan_leads_total{outcome}` | How much never reached a model at all |
+
+**Costs are list prices**, matched by longest model-id prefix, with cache reads at 0.1×
+and writes at 1.25×. Any negotiated rate is unknowable from here, so every figure is an
+upper bound rather than an invoice. An unpriced model counts tokens and reports zero cost
+rather than guessing.
+
+**Metrics bind to 127.0.0.1 by default**, like everything else this app serves. They carry
+no message content, addresses or credentials — but scraping from a container needs
+`METRICS_HOST=0.0.0.0` set deliberately.
+
+Tracing is off by default and needs a collector; `docker compose` brings up Tempo on 4318
+for it. Every `tool_calls` row carries its trace id, so an audit row and a span are two
+views of the same event.
+
+Both libraries are optional: without them the agent runs exactly as before, just
+unmeasured.
+
 ## Customising the prompts
 
 What makes a *useful* brief is a judgement call — it depends on your industry, your
