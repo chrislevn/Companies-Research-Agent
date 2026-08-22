@@ -467,9 +467,25 @@ class Store:
             rows = conn.execute(sql, params).fetchall()
         return [r for r in (self._brief_row(row) for row in rows) if r]
 
+    # A brief moves forward only. Re-approving a delivered brief would quietly
+    # undo the record that it was sent, and re-approving a rejected one would
+    # erase somebody's decision — both look like success from the UI.
+    BRIEF_TRANSITIONS = {
+        "draft": {"approved", "rejected"},
+        "approved": {"delivered", "rejected"},
+        "rejected": set(),
+        "delivered": set(),
+    }
+
     def set_brief_status(self, brief_id: str, status: str, *, approved_by: str = "") -> bool:
         record = self.get_brief(brief_id)
         if record is None:
+            return False
+        allowed = self.BRIEF_TRANSITIONS.get(record["status"], set())
+        if status != record["status"] and status not in allowed:
+            log.warning(
+                "Refusing to move brief %s from %s to %s", brief_id, record["status"], status
+            )
             return False
         brief = record["brief"]
         brief["status"] = status

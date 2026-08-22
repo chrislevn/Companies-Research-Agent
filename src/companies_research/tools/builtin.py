@@ -107,10 +107,9 @@ class DeliverBriefArgs(BaseModel):
     note: str = Field(default="", max_length=2000)
 
 
-# Registered now, implemented in WO-06. It exists at this stage so the recipient
-# allow-list has a real tool to guard and the injection tests exercise a real
-# gate rather than a hypothetical one. `brief:deliver` is off by default, so a
-# call is refused at the scopes gate whatever the arguments say.
+# `brief:deliver` is off by default, so a call is refused at the scopes gate
+# whatever the arguments say, and the recipient allow-list is checked on top of
+# that. Both run before the provider is ever reached.
 DELIVER_BRIEF = ToolSpec(
     name="deliver_brief",
     args_model=DeliverBriefArgs,
@@ -145,9 +144,7 @@ def calendar_read(*, domain: str = "", company: str = "", lookahead_days: int = 
 def deliver_brief(*, brief_id: str, recipient: str, note: str = "",
                   _deliver: Any = None) -> Any:
     if _deliver is None:
-        raise NotImplementedError(
-            "delivery is not implemented yet — WO-06 adds the DeliveryProvider"
-        )
+        raise ValueError("deliver_brief requires a _deliver dependency")
     return _deliver()
 
 
