@@ -119,6 +119,9 @@ class Settings:
     calendar_enabled: bool = True
     calendar_provider: str = "google"
     calendar_lookahead_days: int = 30
+    delivery_provider: str = "file"
+    delivery_account: str = ""
+    delivery_dir: Path = ROOT / "out" / "briefs"
     prompts_dir: Path = ROOT / "prompts"
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
@@ -130,6 +133,10 @@ class Settings:
     ignored_domains: list[str] = field(default_factory=list)
 
     # -- derived views; every field is declared above this line ----------
+
+    @property
+    def credentials_dir(self) -> Path:
+        return self.google_credentials_file.parent
 
     @property
     def recipient_allowlist(self) -> set[str]:
@@ -183,6 +190,12 @@ def load_settings() -> Settings:
         # A month is far enough ahead to be worth preparing for and short enough
         # that a standing weekly invite does not drown the real meeting.
         calendar_lookahead_days=_int("CALENDAR_LOOKAHEAD_DAYS", 30),
+        # `file` by default: reading mail is what this agent is for, sending it
+        # is a different kind of act, and the safe option should be the one you
+        # get without asking for it.
+        delivery_provider=os.getenv("DELIVERY_PROVIDER", "file"),
+        delivery_account=os.getenv("DELIVERY_ACCOUNT", ""),
+        delivery_dir=_path("DELIVERY_DIR", "out/briefs"),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
