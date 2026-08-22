@@ -175,6 +175,129 @@ def state() -> dict:
     }
 
 
+# --- briefs: the approval queue --------------------------------------------
+
+
+@app.get("/api/briefs")
+def list_briefs(status: str | None = None, limit: int = 100) -> dict:
+    from ..briefs import to_html
+    from ..models import Brief
+
+    store = Store()
+    rows = store.list_briefs(status=status, limit=limit)
+    out = []
+    for row in rows:
+        if not row.get("brief"):
+            continue
+        brief = Brief.model_validate(row["brief"])
+        out.append({
+            "id": row["id"],
+            "status": row["status"],
+            "company": row["company"],
+            "domain": row["domain"],
+            "generated_at": row["generated_at"],
+            "approved_by": row["approved_by"],
+            "approved_at": row["approved_at"],
+            "html": to_html(brief),
+            # Surfaced separately so the review screen can flag them without
+            # re-deriving what counts as doubtful.
+            "unknowns": brief.unknowns,
+            "sources": brief.sources,
+            "unverified_count": len(brief.unverified_claims),
+            "verified_count": len(brief.verified_claims),
+            "meeting": brief.upcoming_meeting.model_dump(mode="json")
+            if brief.upcoming_meeting else None,
+        })
+    return {"briefs": out, "delivery": _delivery_state()}
+
+
+def _delivery_state() -> dict:
+    """What approving would actually do — the UI says so before the click."""
+    from ..delivery import DeliveryError, build_delivery
+    from .. import tools
+
+    try:
+        provider = build_delivery()
+        describe, leaves, error = provider.describe(), provider.leaves_machine, ""
+    except DeliveryError as exc:
+        describe, leaves, error = SETTINGS.delivery_provider, False, str(exc)
+    return {
+        "provider": SETTINGS.delivery_provider,
+        "describes_as": describe,
+        "leaves_machine": leaves,
+        "error": error,
+        "scope_granted": tools.granted("brief:deliver"),
+        "allowed_recipients": sorted(SETTINGS.recipient_allowlist),
+    }
+
+
+@app.post("/api/briefs/{brief_id}/approve")
+def approve_brief(brief_id: str, payload: dict = Body(default={})) -> dict:
+    """Record that a human approved this, then attempt delivery.
+
+    Approving is not the same as sending. The gate is consulted on delivery
+    regardless of who clicked, so an approval can be recorded even when the
+    brief cannot leave the machine — which is the normal case, since
+    `brief:deliver` is off by default.
+    """
+    from ..briefs import deliver
+
+    recipient = str(payload.get("recipient", "")).strip()
+    note = str(payload.get("note", "")).strip()
+    approver = str(payload.get("approved_by", "") or "operator").strip()
+    if not recipient:
+        raise HTTPException(400, "A recipient is required.")
+
+    store = Store()
+    existing = store.get_brief(brief_id)
+    if existing is None:
+        raise HTTPException(404, "No such brief")
+    if not store.set_brief_status(brief_id, "approved", approved_by=approver):
+        raise HTTPException(
+            409, f"This brief is already {existing['status']} and cannot be approved again."
+        )
+
+    outcome = deliver(brief_id=brief_id, recipient=recipient, note=note, store=store)
+    return {
+        "id": brief_id,
+        "status": store.get_brief(brief_id)["status"],
+        "delivered": outcome.ok,
+        "destination": outcome.destination,
+        "error": outcome.error,
+        "provider": outcome.provider,
+    }
+
+
+@app.post("/api/briefs/{brief_id}/reject")
+def reject_brief(brief_id: str, payload: dict = Body(default={})) -> dict:
+    reason = str(payload.get("reason", "")).strip()
+    approver = str(payload.get("approved_by", "") or "operator").strip()
+    store = Store()
+    existing = store.get_brief(brief_id)
+    if existing is None:
+        raise HTTPException(404, "No such brief")
+    if not store.set_brief_status(brief_id, "rejected", approved_by=approver):
+        raise HTTPException(
+            409, f"This brief is already {existing['status']} and cannot be rejected."
+        )
+    log.info("Brief %s rejected: %s", brief_id, reason or "(no reason given)")
+    return {"id": brief_id, "status": "rejected"}
+
+
+@app.post("/api/briefs/generate")
+def generate_brief(payload: dict = Body(default={})) -> dict:
+    from ..briefs import generate
+
+    domain = str(payload.get("domain", "")).strip().lower()
+    if not domain:
+        raise HTTPException(400, "A domain is required.")
+    store = Store()
+    brief = generate(domain=domain, store=store)
+    if brief is None:
+        raise HTTPException(404, f"No triaged lead for {domain}")
+    return {"id": store.save_brief(brief), "domain": domain}
+
+
 @app.get("/api/presets")
 def presets() -> dict:
     return {"presets": mailboxes.presets_payload()}

@@ -317,3 +317,43 @@ pre {
 .research-body ul.news li { margin-bottom: .5rem; }
 .research-body ul.sources li { margin-bottom: .15rem; word-break: break-all; }
 .research-body .note { font-style: italic; }
+
+/* --- step 5: the approval queue ----------------------------------------- */
+.delivery-banner {
+  padding: .6rem .9rem; border-radius: 6px; margin: 0 0 1rem;
+  font-size: .9rem; border: 1px solid transparent;
+}
+.delivery-banner.safe { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+.delivery-banner.warn { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; font-weight: 600; }
+
+.brief-card { border: 1px solid var(--line, #e5e7eb); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem; }
+.brief-card.status-delivered { opacity: .72; }
+.brief-card.status-rejected  { opacity: .55; }
+.brief-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.brief-head h3 { margin: 0; }
+.status-tag { background: #eef2ff; color: #3730a3; }
+
+/* Brief and its sources side by side: verification is a glance, not a scroll. */
+.brief-split { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: 1.25rem; margin-top: .85rem; }
+@media (max-width: 800px) { .brief-split { grid-template-columns: 1fr; } }
+.brief-doc { min-width: 0; max-height: 26rem; overflow-y: auto; padding-right: .5rem; }
+.brief-doc h1 { font-size: 1.15rem; margin: 0 0 .25rem; }
+.brief-doc h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; opacity: .65; margin: 1rem 0 .3rem; }
+.brief-doc dt { font-weight: 600; font-size: .85rem; margin-top: .4rem; }
+.brief-doc dd { margin: 0 0 .3rem; font-size: .9rem; }
+.brief-doc .flag { background: #fef3c7; color: #78350f; border-radius: 3px; padding: 0 .3rem; font-size: .74rem; }
+.brief-doc .src { font-size: .74rem; }
+.brief-doc section.unverified, .brief-doc section.unknowns { background: #fffbeb; border-left: 3px solid #f59e0b; padding: .5rem .75rem; border-radius: 0 4px 4px 0; }
+
+.brief-side { border-left: 1px solid var(--line, #e5e7eb); padding-left: 1rem; font-size: .82rem; }
+.brief-side h4 { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; opacity: .6; margin: 0 0 .35rem; }
+.brief-side ul { margin: 0 0 1rem; padding-left: 1rem; }
+.brief-side ul.gaps li { color: #92400e; margin-bottom: .25rem; }
+.brief-side ul.sources li { word-break: break-all; margin-bottom: .2rem; }
+
+/* The recipient is confirmed in its own block — it is what an injection targets. */
+.approve-block { border: 1px solid #d1d5db; border-radius: 6px; padding: .85rem; margin-top: 1rem; background: var(--surface-alt, #f9fafb); }
+.approve-block h4 { margin: 0 0 .4rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+.approve-block select, .approve-block textarea { width: 100%; margin-bottom: .5rem; }
+.approve-actions { display: flex; gap: .5rem; }
+.ok { color: #15803d; }

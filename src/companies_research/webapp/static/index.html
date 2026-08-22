@@ -17,6 +17,7 @@
   </div>
   <nav class="topbar-actions">
     <button class="ghost" data-nav="dashboard" data-i18n="nav.home">Home</button>
+    <button class="ghost" data-nav="review" data-i18n="nav.review">Review</button>
     <button class="ghost" data-nav="settings" data-i18n="nav.settings">Settings</button>
     <button class="ghost lang" id="lang-toggle">Tiếng Việt</button>
   </nav>
@@ -164,6 +165,21 @@
   <div class="stats" id="stats"></div>
   <p class="error" id="dash-error" hidden></p>
   <div id="leads"></div>
+</section>
+
+<!-- =========================== REVIEW ============================ -->
+<section id="view-review" hidden>
+  <div class="dash-head">
+    <div>
+      <h1 data-i18n="review.title">Briefs to review</h1>
+      <p class="muted" id="review-sub"></p>
+    </div>
+  </div>
+
+  <!-- What approving would actually do. Stated before the click, not after. -->
+  <p class="delivery-banner" id="delivery-banner"></p>
+  <p class="error" id="review-error" hidden></p>
+  <div id="review-list"></div>
 </section>
 
 <!-- ========================== SETTINGS =========================== -->

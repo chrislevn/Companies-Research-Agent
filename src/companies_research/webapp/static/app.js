@@ -97,6 +97,8 @@ function render() {
 
   if (VIEW === "settings") {
     view = "settings";
+  } else if (VIEW === "review") {
+    view = "review";
   } else if (SETUP_STEPS.includes(VIEW)) {
     view = "setup";
     step = VIEW;
@@ -107,12 +109,14 @@ function render() {
   $("#view-setup").hidden = view !== "setup";
   $("#view-dashboard").hidden = view !== "dashboard";
   $("#view-settings").hidden = view !== "settings";
+  $("#view-review").hidden = view !== "review";
   // During first-run setup there is nowhere else to go yet.
   $$(".topbar-actions [data-nav]").forEach((b) => { b.hidden = !!pending && VIEW === null; });
 
   if (view === "setup") renderSetup(step);
   if (view === "dashboard") renderDashboard();
   if (view === "settings") renderSettings();
+  if (view === "review") renderReview();
 }
 
 // --- setup -----------------------------------------------------------------
@@ -409,6 +413,191 @@ function researchBlock(lead) {
   return box;
 }
 
+// --- review (step 5) -------------------------------------------------------
+
+/* Designed for someone tired at the end of the day. Three rules:
+   the brief and its sources are visible together, everything doubtful is
+   flagged rather than smoothed over, and the recipient is confirmed in its own
+   block — because the recipient is exactly what an injected instruction is
+   trying to change. */
+async function renderReview() {
+  const list = $("#review-list");
+  const banner = $("#delivery-banner");
+  list.textContent = "";
+  $("#review-error").hidden = true;
+
+  let payload;
+  try {
+    payload = await api("/api/briefs");
+  } catch (err) {
+    $("#review-error").textContent = err.message;
+    $("#review-error").hidden = false;
+    return;
+  }
+
+  const d = payload.delivery || {};
+  banner.className = "delivery-banner " + (d.leaves_machine ? "warn" : "safe");
+  banner.textContent = d.error
+    ? t("review.deliveryBroken", { error: d.error })
+    : d.leaves_machine
+      ? t("review.deliveryLeaves", { provider: d.describes_as })
+      : t("review.deliveryLocal", { provider: d.describes_as });
+  if (!d.scope_granted) {
+    banner.textContent += "  " + t("review.scopeOff");
+  }
+
+  const briefs = payload.briefs || [];
+  const drafts = briefs.filter((b) => b.status === "draft");
+  $("#review-sub").textContent = t("review.sub", {
+    drafts: drafts.length, total: briefs.length,
+  });
+
+  if (!briefs.length) {
+    const empty = el("div", "empty");
+    empty.appendChild(el("p", "empty-title", t("review.empty")));
+    empty.appendChild(el("p", "muted", t("review.emptyHint")));
+    list.appendChild(empty);
+    return;
+  }
+  briefs.forEach((b) => list.appendChild(briefCard(b, d)));
+}
+
+function briefCard(brief, delivery) {
+  const card = el("article", "brief-card status-" + brief.status);
+
+  const head = el("header", "brief-head");
+  const title = el("div");
+  title.appendChild(el("h3", null, brief.company || brief.domain));
+  title.appendChild(el("p", "muted small",
+    [brief.domain, formatDate(brief.generated_at)].filter(Boolean).join(" · ")));
+  head.appendChild(title);
+
+  const tags = el("div", "tags");
+  tags.appendChild(el("span", "tag status-tag", t("review.status." + brief.status)));
+  if (brief.unverified_count) {
+    tags.appendChild(el("span", "tag unsure",
+      t("review.unverified", { n: brief.unverified_count })));
+  }
+  if (brief.meeting) tags.appendChild(el("span", "tag meeting", t("lead.meeting")));
+  head.appendChild(tags);
+  card.appendChild(head);
+
+  /* Brief on the left, sources on the right: verification is one glance and
+     one click away, not a scroll to the bottom of the document. */
+  const split = el("div", "brief-split");
+  const doc = el("div", "brief-doc");
+  doc.innerHTML = brief.html;          // server-rendered, every value escaped
+  split.appendChild(doc);
+
+  const side = el("aside", "brief-side");
+  if (brief.unknowns?.length) {
+    side.appendChild(el("h4", null, t("review.gaps")));
+    const gaps = el("ul", "gaps");
+    brief.unknowns.forEach((g) => gaps.appendChild(el("li", null, g)));
+    side.appendChild(gaps);
+  }
+  side.appendChild(el("h4", null, t("review.sources", { n: brief.sources.length })));
+  const sources = el("ul", "sources");
+  (brief.sources || []).forEach((url) => {
+    const li = el("li");
+    const a = el("a", "small", url.replace(/^https?:\/\//, "").slice(0, 46));
+    a.href = url; a.target = "_blank"; a.rel = "noopener";
+    li.appendChild(a);
+    sources.appendChild(li);
+  });
+  side.appendChild(sources);
+  split.appendChild(side);
+  card.appendChild(split);
+
+  if (brief.status !== "draft") {
+    const done = el("p", "muted small");
+    done.textContent = t("review.decided", {
+      status: t("review.status." + brief.status),
+      who: brief.approved_by || "—",
+      when: formatDate(brief.approved_at),
+    });
+    card.appendChild(done);
+    return card;
+  }
+
+  card.appendChild(approvalBlock(brief, delivery));
+  return card;
+}
+
+/* The recipient gets its own confirmed block. It is the single field an
+   injected instruction most wants to change, so it is never pre-filled with
+   anything the model produced — only with addresses the operator allow-listed. */
+function approvalBlock(brief, delivery) {
+  const box = el("form", "approve-block");
+  box.appendChild(el("h4", null, t("review.sendTo")));
+
+  const allowed = delivery.allowed_recipients || [];
+  const select = el("select");
+  select.id = "to-" + brief.id;
+  if (!allowed.length) {
+    const opt = el("option", null, t("review.noRecipients"));
+    opt.value = ""; select.appendChild(opt); select.disabled = true;
+  }
+  allowed.forEach((addr) => {
+    const opt = el("option", null, addr);
+    opt.value = addr;
+    select.appendChild(opt);
+  });
+  box.appendChild(select);
+  box.appendChild(el("p", "muted small", t("review.allowlistNote")));
+
+  const note = el("textarea");
+  note.placeholder = t("review.notePlaceholder");
+  note.rows = 2;
+  box.appendChild(note);
+
+  const actions = el("div", "approve-actions");
+  const approve = el("button", "btn primary", t("review.approve"));
+  const reject = el("button", "btn ghost", t("review.reject"));
+  approve.type = reject.type = "button";
+  const result = el("p", "muted small");
+
+  approve.onclick = async () => {
+    approve.disabled = reject.disabled = true;
+    result.textContent = t("review.working");
+    try {
+      const out = await api(`/api/briefs/${brief.id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ recipient: select.value, note: note.value }),
+      });
+      result.className = out.delivered ? "ok small" : "error small";
+      result.textContent = out.delivered
+        ? t("review.delivered", { where: out.destination })
+        : t("review.approvedNotSent", { error: out.error });
+      setTimeout(renderReview, 1200);
+    } catch (err) {
+      result.className = "error small";
+      result.textContent = err.message;
+      approve.disabled = reject.disabled = false;
+    }
+  };
+
+  reject.onclick = async () => {
+    reject.disabled = approve.disabled = true;
+    try {
+      await api(`/api/briefs/${brief.id}/reject`, {
+        method: "POST", body: JSON.stringify({ reason: note.value }),
+      });
+      renderReview();
+    } catch (err) {
+      result.className = "error small";
+      result.textContent = err.message;
+      reject.disabled = approve.disabled = false;
+    }
+  };
+
+  actions.appendChild(approve);
+  actions.appendChild(reject);
+  box.appendChild(actions);
+  box.appendChild(result);
+  return box;
+}
+
 // --- settings --------------------------------------------------------------
 
 function renderSettings() {
@@ -550,7 +739,11 @@ function wire() {
   };
 
   $$(".topbar-actions [data-nav]").forEach((button) => {
-    button.onclick = () => { VIEW = button.dataset.nav === "settings" ? "settings" : null; render(); };
+    button.onclick = () => {
+      const target = button.dataset.nav;
+      VIEW = (target === "settings" || target === "review") ? target : null;
+      render();
+    };
   });
 
   /* The three steps are a table of contents, not a one-way road. The API key
