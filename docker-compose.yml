@@ -1,0 +1,64 @@
+# Observability stack for the agent. The agent itself runs on the host — it
+# needs your mailbox credentials and, if you use one, a local Ollama — so this
+# brings up only the things that watch it.
+#
+#   METRICS_HOST=0.0.0.0 ./start.sh          # so the container can scrape it
+#   docker compose up -d                     # then open http://localhost:3000
+#
+# METRICS_HOST matters: the agent binds metrics to 127.0.0.1 by default, like
+# everything else it serves, and a container cannot reach that.
+#
+# The dashboard is provisioned, not imported by hand: a dashboard that only
+# exists in somebody's browser is a dashboard that does not exist.
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: cra-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      # Lets the container scrape the agent running on the host. Native on
+      # Docker Desktop; this line is what makes it work on Linux too.
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: cra-grafana
+    depends_on: [prometheus]
+    environment:
+      # Local-only observability for one operator. No login to fumble during a
+      # demo, and nothing here is reachable from outside the machine.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
+  # Receives OTLP spans when TRACING_ENABLED=true, and serves the trace UI.
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: cra-tempo
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./tempo.yml:/etc/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "4318:4318"   # OTLP/HTTP — where OTLP_ENDPOINT points
+      - "3200:3200"   # query API
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  tempo-data:

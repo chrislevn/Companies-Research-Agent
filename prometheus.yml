@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 10s        # a demo wants to see the bar move, not wait a minute
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: companies-research-agent
+    static_configs:
+      # The agent runs on the host, not in a container: it needs mailbox
+      # credentials and possibly a local Ollama.
+      - targets: ["host.docker.internal:9464"]
+        labels:
+          service: companies-research-agent

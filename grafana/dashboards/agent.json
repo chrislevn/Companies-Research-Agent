@@ -1,0 +1,579 @@
+{
+  "uid": "cra-agentops",
+  "title": "Agent \u2014 pipeline, gate and cost",
+  "description": "Emitted almost entirely from the tool gate, which every capability already passes through.",
+  "tags": [
+    "agent",
+    "companies-research"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Scan overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "title": "Leads found",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Messages triage judged worth researching.",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(agent_scan_leads_total{outcome=\"lead\"})",
+          "legendFormat": "leads",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Filtered before any model ran",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Deterministic filters do most of the work; this is the volume the LLM never saw.",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(agent_scan_leads_total{outcome=~\"filtered:.*\"})",
+          "legendFormat": "filtered",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Total model spend (list)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "At published list prices, so an upper bound rather than an invoice.",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 9,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(agent_llm_cost_usd_total)",
+          "legendFormat": "usd",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "What the scan decided",
+      "type": "piechart",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 10,
+        "x": 14,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (agent_scan_leads_total)",
+          "legendFormat": "{{outcome}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Per-agent success rate",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "title": "Tool call outcomes over time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(agent_tool_calls_total[5m]))",
+          "legendFormat": "{{outcome}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Success rate by caller",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Which pipeline stage is failing, rather than that something is.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (caller) (agent_tool_calls_total{outcome=\"ok\"}) / clamp_min(sum by (caller) (agent_tool_calls_total), 1)",
+          "legendFormat": "{{caller}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Tool gate denials",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "title": "Denials by gate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "An injection attempt appears here as a live bar on the scopes gate.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (gate) (rate(agent_tool_denied_total[1m]))",
+          "legendFormat": "{{gate}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "title": "Denials by tool and gate",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (tool, gate) (agent_tool_denied_total)",
+          "legendFormat": "{{tool}} \u00b7 {{gate}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Latency by stage",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "title": "Stage duration (p50 / p95)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, stage) (rate(agent_stage_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{stage}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(agent_stage_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{stage}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "title": "Tool duration p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, tool) (rate(agent_tool_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{tool}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Cost per brief",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "title": "Cost per brief (p50 / p95)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 31
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(agent_brief_cost_usd_bucket[30m])))",
+          "legendFormat": "p50",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(agent_brief_cost_usd_bucket[30m])))",
+          "legendFormat": "p95",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "title": "Spend by stage",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Research dominates; triage is a cheap classification.",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 31
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (stage) (increase(agent_llm_cost_usd_total[30m]))",
+          "legendFormat": "{{stage}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "title": "Tokens by model",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 31
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (model, kind) (rate(agent_llm_tokens_total[5m]))",
+          "legendFormat": "{{model}} {{kind}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Recent traces",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "panels": []
+    },
+    {
+      "id": 20,
+      "title": "Traces (set TRACING_ENABLED=true)",
+      "type": "table",
+      "datasource": {
+        "type": "tempo",
+        "uid": "cra-tempo"
+      },
+      "description": "One span per scan, children per stage and per tool call. Every tool_calls row carries its trace id, so an audit row and a span are two views of the same event.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceqlSearch",
+          "query": "{resource.service.name=\"companies-research-agent\"}",
+          "datasource": {
+            "type": "tempo",
+            "uid": "cra-tempo"
+          }
+        }
+      ]
+    }
+  ]
+}
