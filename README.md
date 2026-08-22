@@ -14,9 +14,13 @@ use, and a command line for servers and scheduled jobs.
 |---|---|---|
 | 1. **Read email & triage** | ✅ built | Fetch new mail from any provider, filter noise, classify who is a new customer/partner |
 | 2. **Company research** | ✅ built | Company profile, products, recent news and meeting prep, with sources |
-| 3. Calendar lookup | ⬜ | Find upcoming meetings with that company |
-| 4. Brief generation | ⬜ | Company profile, products, recent news, contact, meeting prep notes |
-| 5. Human approval | ⬜ | Review → forward by email or save to the knowledge base |
+| 3. **Calendar lookup** | ✅ built | Upcoming meetings with that company, matched on attendee and organizer domains |
+| 4. **Brief generation** | ✅ built | Triage + research + calendar assembled into one sourced, reviewable document |
+| 5. **Human approval** | ✅ built | Review queue in the web interface; approve, reject, deliver — nothing auto-sends |
+
+All five steps are built. Every capability the agent has runs behind a
+[six-gate tool harness](#the-tool-harness), and `./start.sh eval` scores it against
+30 recorded fixtures offline.
 
 All five steps are implemented.
 
@@ -511,5 +515,7 @@ the difference between a moment and a coffee break.
 | `USER_EMAILS` | — | Comma separated; your own mail is skipped |
 | `IGNORED_DOMAINS` | — | Your own company, known vendors |
 | `SCAN_DAYS` | `1` | How far back each check looks |
+| `WATCH_ENABLED` | `true` | Re-check the mailbox automatically while running |
+| `WATCH_INTERVAL_MINUTES` | `5` | How often the watcher looks |
 | `ACCOUNTS_FILE` | unset | Overrides the default `accounts.json` location |
 | `DB_PATH` | `data/agent.db` | |

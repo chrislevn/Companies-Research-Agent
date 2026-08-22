@@ -17,6 +17,9 @@ msal>=1.28.0
 
 # Generic IMAP uses the standard library (imaplib, email) — no extra dependency.
 
+# Tests and the evaluation harness
+pytest>=8.0.0
+
 # Observability (optional — the agent runs without these, just unmeasured)
 prometheus-client>=0.20.0
 opentelemetry-sdk>=1.25.0

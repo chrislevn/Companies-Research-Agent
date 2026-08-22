@@ -1,17 +1,18 @@
 # Research Agent — Project Handoff
 
-**Verified against the working tree on 21 August 2026.**
+**Verified against the working tree on 22 August 2026.**
 
 A local-first agent that reads a mailbox each morning, finds genuine new customers and
-partners among the noise, and researches their companies. Steps 1 and 2 of five are
-built and running against a real inbox.
+partners among the noise, researches their companies, checks the calendar, and puts a
+sourced brief in front of a human to approve. All five steps are built and running
+against a real inbox, behind a six-gate tool harness.
 
 | | |
 |---|---|
 | Repo | `Companies-Research-Agent` |
-| Python | 5,129 lines |
+| Python | ~7,900 lines |
 | Mailbox | 1 Gmail, live |
-| Tests | none |
+| Tests | 135 unit + a 30-fixture eval harness, all offline |
 
 ---
 
@@ -21,9 +22,9 @@ built and running against a real inbox.
 |---|---|---|---|
 | 1 | Read email & triage | ✅ **built** | Fetch from Gmail / Microsoft Graph / IMAP. Deterministic filters drop bulk mail, then a model classifies survivors into `TriageResult` — relationship, company, contact, intent, `should_research`. |
 | 2 | Company research | ✅ **built** | Each lead's domain gets a profile: products, recent news, meeting-prep notes, and the source URL behind every claim. Cached by domain for 14 days. |
-| 3 | Calendar lookup | ⬜ | Find upcoming meetings with that company. The Google scope `calendar.readonly` is already requested and consented — nothing reads it yet. |
-| 4 | Brief generation | ⬜ | Assemble triage + research + calendar into one document per lead. Most raw material already exists in `CompanyProfile`. |
-| 5 | Human approval | ⬜ | Review, then forward by email or file to a knowledge base. Needs `gmail.send`, which means re-consenting the OAuth token. |
+| 3 | Calendar lookup | ✅ **built** | Upcoming meetings matched on attendee and organizer domains; a name in a title is a weaker signal and says so. |
+| 4 | Brief generation | ✅ **built** | Assembled in code, not by a model. Every claim carries its source; unsourced ones are marked and counted, never hidden. |
+| 5 | Human approval | ✅ **built** | Review queue in the web app. Delivery defaults to a local file; sending needs a separate account and never touches the reading mailbox. |
 
 ---
 
@@ -38,6 +39,13 @@ once and the whole codebase opens up.
 | Mail access | `providers/base.py` | `gmail` · `microsoft` · `imap` | `accounts.json` |
 | Triage model | `agents/backends.py` | `anthropic` · `ollama` | `TRIAGE_BACKEND` |
 | Company research | `research/base.py` | `claude_web` | `RESEARCH_PROVIDER` |
+| Calendar | `calendars/base.py` | `google` | `CALENDAR_PROVIDER` |
+| Delivery | `delivery/base.py` | `file` · `gmail_send` | `DELIVERY_PROVIDER` |
+
+A third convention arrived with the tool harness: **every capability passes through one
+gate** (`tools/registry.py`) running six checks in order — schema, auth, scopes,
+rate_limit, audit, execute. The audit row is written before execute, so a crash still
+leaves evidence. That chokepoint is also where all the metrics come from.
 
 Two conventions hold across all of them:
 
@@ -94,7 +102,7 @@ src/companies_research/
 | Research | `claude_web` / `claude-opus-5` | effort `medium`, 8 searches |
 | Ollama | running, 3 models | all coder-tuned |
 
-### 🛑 Contradiction worth resolving first
+### 🛑 Still unresolved: triage is not local
 
 The user explicitly asked for local-only triage *"to save cost and security"*, and the
 Ollama backend was built and verified for it. But `.env` has **no `TRIAGE_BACKEND` line**,
