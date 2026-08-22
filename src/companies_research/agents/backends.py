@@ -39,6 +39,7 @@ class Completion:
     text: str = ""
     error: str | None = None
     truncated: bool = False
+    usage: Any = None      # obs.Usage when the backend can report one
 
 
 class TriageBackend(Protocol):
@@ -105,13 +106,18 @@ class AnthropicBackend:
             messages=[{"role": "user", "content": user}],
         )
 
+        from ..obs import usage_from_response
+
+        usage = usage_from_response(response, model=self.model)
         if response.stop_reason == "refusal":
             category = getattr(response.stop_details, "category", None)
             log.warning("Triage refused: %s", category)
-            return Completion(error="model refused to classify")
+            return Completion(error="model refused to classify", usage=usage)
 
         text = next((b.text for b in response.content if b.type == "text"), "")
-        return Completion(text=text, truncated=response.stop_reason == "max_tokens")
+        return Completion(
+            text=text, truncated=response.stop_reason == "max_tokens", usage=usage
+        )
 
 
 # --- local -----------------------------------------------------------------

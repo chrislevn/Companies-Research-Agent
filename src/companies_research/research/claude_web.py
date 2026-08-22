@@ -141,6 +141,13 @@ class ClaudeWebResearch:
                 searches += used_searches
                 fetches += used_fetches
 
+                from ..obs import LEDGER, usage_from_response
+
+                LEDGER.add(
+                    usage_from_response(response, model=self.model, searches=used_searches),
+                    stage="research",
+                )
+
                 if response.stop_reason == "refusal":
                     category = getattr(response.stop_details, "category", None)
                     return ResearchOutcome(

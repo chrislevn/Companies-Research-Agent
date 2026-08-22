@@ -597,6 +597,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_logging(args.verbose)
+
+    from .obs import start as _start_observability
+
+    _start_observability()
     try:
         return args.func(args)
     except AccountsError as exc:

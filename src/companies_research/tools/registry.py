@@ -207,16 +207,26 @@ def tool(spec: ToolSpec) -> Callable:
             deps = {k: v for k, v in kwargs.items() if k.startswith("_")}
             args = {k: v for k, v in kwargs.items() if not k.startswith("_")}
 
+            from ..obs import metrics as _metrics
+            from ..obs import tracing as _tracing
+
             gates: dict[str, bool] = {}
             call_id = uuid.uuid4().hex[:16]
             who = _caller.get()
-            trace_id = _trace.get()
+            # A live span wins over the contextvar: it is the more specific
+            # answer, and it is what links this row to a trace.
+            trace_id = _tracing.current_trace_id() or _trace.get()
             args_hash = canonical_args_hash(args)
             started = time.monotonic()
             denied_at: str | None = None
             opened = False
 
             def finish(ok: bool, error: str | None) -> None:
+                elapsed_ms = int((time.monotonic() - started) * 1000)
+                _metrics.record_tool_call(
+                    tool=spec.name, caller=who, ok=ok,
+                    denied_at=denied_at, duration_ms=elapsed_ms,
+                )
                 if not opened:
                     return
                 try:
@@ -239,8 +249,13 @@ def tool(spec: ToolSpec) -> Callable:
                 if opened:
                     finish(False, f"{gate}: {reason}")
                 else:
+                    elapsed_ms = int((time.monotonic() - started) * 1000)
+                    _metrics.record_tool_call(
+                        tool=spec.name, caller=who, ok=False,
+                        denied_at=gate, duration_ms=elapsed_ms,
+                    )
                     _record_denial(call_id, spec, who, args_hash, gates, gate,
-                                   int((time.monotonic() - started) * 1000), trace_id)
+                                   elapsed_ms, trace_id)
                 return ToolDenied(gate, reason)
 
             # 1 ── schema
@@ -293,7 +308,11 @@ def tool(spec: ToolSpec) -> Callable:
 
             # 6 ── execute
             try:
-                result = fn(**args, **deps)
+                with _tracing.span(f"tool.{spec.name}", **{
+                    "tool.name": spec.name, "tool.caller": who,
+                    "tool.side_effect": spec.side_effect,
+                }):
+                    result = fn(**args, **deps)
             except ToolDenied:
                 raise
             except Exception as exc:

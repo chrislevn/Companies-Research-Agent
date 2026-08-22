@@ -16,6 +16,8 @@ from .providers import Account, EmailProvider, Folder, MessageQuery, ProviderErr
 from .research.base import ResearchOutcome
 from .store import Store
 from . import tools
+from .obs import metrics as obs_metrics
+from .obs import tracing as obs_tracing
 
 if TYPE_CHECKING:  # only for annotations; the provider itself is imported lazily
     from .research.base import ResearchProvider
@@ -167,6 +169,10 @@ def scan(
         log.warning("No enabled accounts to scan")
         return report
 
+    scan_started = time.monotonic()
+    scan_span = obs_tracing.span("scan", **{"scan.accounts": len(accounts)})
+    scan_span.__enter__()
+
     start = since_at or (_utcnow() - since)
     query = MessageQuery(since=start, max_results=max_results, folder=Folder.INBOX)
     if raw_query:
@@ -237,6 +243,7 @@ def scan(
     counts = report.skip_counts()
     for reason, count in sorted(counts.items(), key=lambda kv: -kv[1]):
         log.info("  filtered — %s: %d", reason, count)
+        obs_metrics.record_scan_outcome(f"filtered:{reason}", count)
 
     # Worth its own line rather than one row in the filter table: this is the
     # work the run did *not* have to redo, which is otherwise invisible.
@@ -246,6 +253,8 @@ def scan(
 
     if not candidates:
         say("No new senders to look at")
+        obs_metrics.record_stage("scan", time.monotonic() - scan_started)
+        scan_span.__exit__(None, None, None)
         return report
 
     agent = agent or TriageAgent()
@@ -256,6 +265,8 @@ def scan(
     results = agent.triage([message for _, message in candidates], progress=say)
 
     leads = sum(1 for r in results if r.should_research)
+    obs_metrics.record_scan_outcome("lead", leads)
+    obs_metrics.record_scan_outcome("triaged_not_lead", len(results) - leads)
     say(f"Saving {len(results)} result(s) — {leads} lead(s)")
 
     if research and leads:
@@ -370,10 +381,12 @@ def research_leads(
         name = result.company_name or domain
         say(f"Researching {index}/{len(pending)} · {name} ({domain})")
         started = time.monotonic()
-        outcome = researcher.research(
-            company=result.company_name, domain=domain, context=result.intent_summary
-        )
+        with obs_tracing.span("stage.research", **{"research.domain": domain}):
+            outcome = researcher.research(
+                company=result.company_name, domain=domain, context=result.intent_summary
+            )
         elapsed = time.monotonic() - started
+        obs_metrics.record_stage("research", elapsed)
 
         if outcome.ok and outcome.profile is not None:
             profile = outcome.profile

@@ -54,22 +54,31 @@ def look_up(
     if not SETTINGS.calendar_enabled:
         return CalendarOutcome(reason="calendar lookup is disabled", lookahead_days=days)
 
+    import time as _time
+
+    from ..obs import metrics as _metrics
+    from ..obs import tracing as _tracing
+
     tools.set_caller("calendar.lookup")
+    _started = _time.monotonic()
     try:
         agent = provider or build_calendar()
     except CalendarError as exc:
         return CalendarOutcome(reason=str(exc), lookahead_days=days)
 
     try:
-        return tools.calendar_read(
-            domain=domain,
-            company=company,
-            lookahead_days=days,
-            _look=lambda: agent.upcoming(
-                domain=domain, company=company, lookahead_days=days
-            ),
-        )
+        with _tracing.span("stage.calendar", **{"calendar.domain": domain}):
+            return tools.calendar_read(
+                domain=domain,
+                company=company,
+                lookahead_days=days,
+                _look=lambda: agent.upcoming(
+                    domain=domain, company=company, lookahead_days=days
+                ),
+            )
     except tools.ToolDenied as exc:
         return CalendarOutcome(
             reason=f"denied at {exc.gate}: {exc.reason}", lookahead_days=days
         )
+    finally:
+        _metrics.record_stage("calendar", _time.monotonic() - _started)

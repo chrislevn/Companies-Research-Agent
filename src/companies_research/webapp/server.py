@@ -40,6 +40,9 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from ..obs import start as start_observability
+
+    start_observability()
     WATCHER.start()
     try:
         yield

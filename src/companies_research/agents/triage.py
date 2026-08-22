@@ -98,9 +98,15 @@ class TriageAgent:
                     _clip(message.subject),
                 )
 
+            from ..obs import metrics, tracing
+
             batch_started = time.monotonic()
-            batch_results = self._triage_batch(batch)
+            with tracing.span("stage.triage.batch", **{
+                "batch.size": len(batch), "batch.model": model,
+            }):
+                batch_results = self._triage_batch(batch)
             elapsed = time.monotonic() - batch_started
+            metrics.record_stage("triage", elapsed)
 
             for message, result in zip(batch, batch_results):
                 log.info("  %s", _describe(message, result))
@@ -131,6 +137,11 @@ class TriageAgent:
             user=_render_batch(batch),
             schema=json_schema_for(TriageBatch),
         )
+
+        if completion.usage is not None:
+            from ..obs import LEDGER
+
+            LEDGER.add(completion.usage, stage="triage")
 
         if completion.error:
             return [_fallback(m, completion.error) for m in batch]

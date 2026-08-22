@@ -134,6 +134,13 @@ def build_brief(
             f"{len(unverified)} claim(s) could not be traced to a source page"
         )
 
+    # Recorded here rather than derived by dividing a run total by a count:
+    # most briefs are assembled from cached research and cost nothing at all,
+    # so an average would describe no real brief.
+    from ..obs import LEDGER, metrics as obs_metrics
+
+    obs_metrics.record_brief_cost(LEDGER.total_usd)
+
     return Brief(
         lead_id=lead_id or f"{domain}:{triage.message_id}",
         company=company,
