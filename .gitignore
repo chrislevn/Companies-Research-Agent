@@ -20,6 +20,7 @@ out/
 *.sqlite
 *.sqlite3
 eval_results.json
+!tests/eval/recordings/*.json
 
 # Prompts are user-editable and may carry internal detail or pasted secrets.
 # Share one deliberately by naming it *.example.md.

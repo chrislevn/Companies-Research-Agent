@@ -1,0 +1,37 @@
+{
+  "id": "hard-05-diacritics",
+  "class": "hard",
+  "note": "Vietnamese diacritics in name and company; both must survive intact.",
+  "email": {
+    "message_id": "hard-05-diacritics",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Đặng Quỳnh Anh",
+      "email": "quynhanh.dang@thuduc-electric.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Đề xuất hợp tác thiết bị điện công nghiệp",
+    "body_text": "Kính gửi Quý công ty,\n\nCông ty Cổ phần Điện Thủ Đức xin gửi đề xuất hợp tác cung cấp thiết bị điện công nghiệp. Chúng tôi đã cung cấp cho nhiều khu công nghiệp tại Bình Dương và Đồng Nai.\n\nTrân trọng,\nQuỳnh Anh",
+    "signature_block": "Đặng Quỳnh Anh — Trưởng phòng Dự án — Điện Thủ Đức — thuduc-electric.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": [
+      "Điện Thủ Đức",
+      "Thu Duc Electric",
+      "Thuduc Electric"
+    ],
+    "domain": "thuduc-electric.example",
+    "contact_name": "Đặng Quỳnh Anh"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "lead-09",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-09",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Amara Diallo",
+      "email": "amara.diallo@terraverde.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Sustainability reporting — a fit for your supply chain?",
+    "body_text": "Hi,\n\nTerraVerde helps manufacturers produce CSRD-compliant supply chain reporting. Given your European customers, this may become a requirement soon. Would a 20-minute overview be useful?\n\nAmara",
+    "signature_block": "Amara Diallo — Solutions Consultant — TerraVerde — terraverde.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": "TerraVerde",
+    "domain": "terraverde.example",
+    "contact_name": "Amara Diallo"
+  }
+}

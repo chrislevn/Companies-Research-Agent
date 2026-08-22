@@ -1,0 +1,40 @@
+{
+  "id": "hard-02-ambiguous-name",
+  "class": "hard",
+  "note": "'Meridian' matches many firms; the domain is the only reliable discriminator. Ground-truth correction: an `industry` expectation was removed. The domain uses the reserved .example TLD and cannot resolve, so requiring a populated industry would demand the same fabrication this fixture forbids — the two assertions contradicted each other.",
+  "email": {
+    "message_id": "hard-02-ambiguous-name",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Claire Dubois",
+      "email": "c.dubois@meridian-systems.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Meridian — industrial controls partnership",
+    "body_text": "Hello,\n\nMeridian designs industrial control systems for water treatment. We are not the Meridian in healthcare consulting or the one in asset management — we get confused with both constantly. Interested in exploring a partnership?\n\nClaire",
+    "signature_block": "Claire Dubois | BD | Meridian Systems | meridian-systems.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "partner",
+      "vendor"
+    ],
+    "company_name": "Meridian Systems",
+    "domain": "meridian-systems.example",
+    "contact_name": "Claire Dubois"
+  },
+  "expected_research": {
+    "no_fabricated_claims": true,
+    "must_not_contain": [
+      "healthcare consulting",
+      "asset management"
+    ]
+  }
+}

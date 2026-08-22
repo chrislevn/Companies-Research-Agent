@@ -1,0 +1,31 @@
+{
+  "id": "neg-01-newsletter",
+  "class": "negative",
+  "note": "Editorial newsletter. Has a company name; is not a lead.",
+  "email": {
+    "message_id": "neg-01-newsletter",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "TLDR",
+      "email": "dan@tldrnewsletter.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Nvidia's earnings, Anthropic's new model, and 4 other stories",
+    "body_text": "Today's TLDR:\n\n📱 Nvidia beat expectations again...\n\nYou are receiving this because you subscribed. Unsubscribe here.",
+    "signature_block": "",
+    "received_at": "2026-08-19T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "newsletter",
+      "automated",
+      "unknown"
+    ]
+  }
+}

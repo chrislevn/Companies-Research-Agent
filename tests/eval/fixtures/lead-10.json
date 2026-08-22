@@ -1,0 +1,33 @@
+{
+  "id": "lead-10",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-10",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Nguyễn Thị Hạnh",
+      "email": "hanh.nguyen@saigonpack.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Báo giá bao bì carton — số lượng lớn",
+    "body_text": "Kính gửi anh/chị,\n\nCông ty Saigon Pack chuyên sản xuất bao bì carton sóng. Chúng tôi gửi anh/chị báo giá cho đơn hàng số lượng lớn và mong có cơ hội hợp tác lâu dài. Anh/chị có thể sắp xếp một buổi trao đổi không?\n\nHạnh",
+    "signature_block": "Nguyễn Thị Hạnh | Phòng Kinh doanh | Saigon Pack | saigonpack.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": "Saigon Pack",
+    "domain": "saigonpack.example",
+    "contact_name": "Nguyễn Thị Hạnh"
+  }
+}

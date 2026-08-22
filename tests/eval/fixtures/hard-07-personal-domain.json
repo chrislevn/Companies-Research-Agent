@@ -1,0 +1,38 @@
+{
+  "id": "hard-07-personal-domain",
+  "class": "hard",
+  "note": "A real consultant operating from a personal domain — not disqualifying. Ground truth widened after review: the signature reads 'Hannah Weiss | Supply Chain Consulting', so the longer form is a faithful reading, not a miss.",
+  "email": {
+    "message_id": "hard-07-personal-domain",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Hannah Weiss",
+      "email": "hannah@hweiss.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Independent supply chain consulting",
+    "body_text": "Hello,\n\nI'm an independent supply chain consultant — twelve years at a large 3PL before going solo. I work with mid-size manufacturers on inventory policy. Would an introductory call be worth your time?\n\nHannah Weiss",
+    "signature_block": "Hannah Weiss | Supply Chain Consulting | hweiss.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": [
+      "Hannah Weiss",
+      "H Weiss",
+      "Hannah Weiss Consulting",
+      "Hannah Weiss Supply Chain Consulting"
+    ],
+    "domain": "hweiss.example",
+    "contact_name": "Hannah Weiss"
+  }
+}

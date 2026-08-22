@@ -1,0 +1,33 @@
+{
+  "id": "hard-10-vague-no-company",
+  "class": "hard",
+  "note": "Plausible tone, no identifying detail at all. Low confidence is the right answer.",
+  "email": {
+    "message_id": "hard-10-vague-no-company",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "J. Morrison",
+      "email": "jmorrison2291@outlook.com"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Quick question about your services",
+    "body_text": "Hi,\n\nSaw your company mentioned somewhere and wanted to ask about pricing. Can you send me your rate card?\n\nThanks,\nJ",
+    "signature_block": "",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "unknown",
+      "personal",
+      "customer"
+    ],
+    "company_name": "",
+    "domain": ""
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "hard-08-freemail-real-business",
+  "class": "hard",
+  "note": "Genuine small business on Gmail — the classic false negative.",
+  "email": {
+    "message_id": "hard-08-freemail-real-business",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Ade Kristanto",
+      "email": "ade.kristanto.export@gmail.com"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Coffee bean supply — Gayo highlands",
+    "body_text": "Dear Sir,\n\nWe are a small exporter of Gayo highland arabica, shipping about 6 containers a year. We supply two roasters in Ho Chi Minh City already. Would you like samples?\n\nAde Kristanto\nPT Gayo Prima Export",
+    "signature_block": "Ade Kristanto | PT Gayo Prima Export | Aceh, Indonesia",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": [
+      "PT Gayo Prima Export",
+      "Gayo Prima Export",
+      "Gayo Prima"
+    ],
+    "domain": "",
+    "contact_name": "Ade Kristanto"
+  }
+}

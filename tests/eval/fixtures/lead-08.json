@@ -1,0 +1,32 @@
+{
+  "id": "lead-08",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-08",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Tom Brennan",
+      "email": "tbrennan@quaysidefreight.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "RFQ: sea freight Haiphong to Rotterdam",
+    "body_text": "Hello,\n\nQuayside Freight is tendering for a sea freight partner on the Haiphong–Rotterdam lane, roughly 40 TEU a month. Are you able to quote? Tender closes in three weeks.\n\nRegards,\nTom Brennan",
+    "signature_block": "Tom Brennan | Procurement | Quayside Freight | quaysidefreight.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer"
+    ],
+    "company_name": "Quayside Freight",
+    "domain": "quaysidefreight.example",
+    "contact_name": "Tom Brennan"
+  }
+}

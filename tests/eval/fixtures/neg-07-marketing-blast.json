@@ -1,0 +1,30 @@
+{
+  "id": "neg-07-marketing-blast",
+  "class": "negative",
+  "note": "Retail marketing. Company, product, call to action — still not a lead.",
+  "email": {
+    "message_id": "neg-07-marketing-blast",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Macy's",
+      "email": "no-reply@em.macys.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "⚡ 48 hours only: up to 60% off everything",
+    "body_text": "Our biggest sale of the season ends Sunday. Shop now.\n\nYou received this because you shopped with us. Manage preferences | Unsubscribe",
+    "signature_block": "",
+    "received_at": "2026-08-19T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "newsletter",
+      "automated"
+    ]
+  }
+}

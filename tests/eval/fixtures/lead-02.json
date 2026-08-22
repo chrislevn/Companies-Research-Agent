@@ -1,0 +1,33 @@
+{
+  "id": "lead-02",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-02",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Trần Minh Khoa",
+      "email": "khoa.tran@vinatextile.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Hợp tác cung cấp vải cho quý 4",
+    "body_text": "Chào anh,\n\nBên em là Vinatextile, chuyên cung cấp vải dệt kim cho các thương hiệu thời trang. Bên em muốn hợp tác cung cấp cho công ty anh trong quý 4. Anh sắp xếp được buổi họp tuần sau không ạ?\n\nTrân trọng,\nKhoa",
+    "signature_block": "Trần Minh Khoa — Giám đốc Kinh doanh | Vinatextile | vinatextile.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": "Vinatextile",
+    "domain": "vinatextile.example",
+    "contact_name": "Trần Minh Khoa"
+  }
+}

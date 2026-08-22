@@ -1,0 +1,36 @@
+{
+  "id": "hard-06-mixed-language",
+  "class": "hard",
+  "note": "Vietnamese and English interleaved in one message.",
+  "email": {
+    "message_id": "hard-06-mixed-language",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Le Hoang Nam",
+      "email": "nam.le@fpt-cloudworks.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Re: Cloud migration proposal / Đề xuất chuyển đổi cloud",
+    "body_text": "Hi anh,\n\nThanks for the call yesterday. Em gửi lại proposal về cloud migration cho hệ thống ERP của bên anh. Timeline dự kiến 6 tuần, và we can start from mid-September if that works. Em đính kèm file scope of work.\n\nLet me know anh nhé,\nNam",
+    "signature_block": "Le Hoang Nam | Solutions Architect | CloudWorks | fpt-cloudworks.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": [
+      "CloudWorks",
+      "FPT CloudWorks"
+    ],
+    "domain": "fpt-cloudworks.example",
+    "contact_name": "Le Hoang Nam"
+  }
+}

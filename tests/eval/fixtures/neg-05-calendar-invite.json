@@ -1,0 +1,30 @@
+{
+  "id": "neg-05-calendar-invite",
+  "class": "negative",
+  "note": "Calendar system mail about a meeting that already exists.",
+  "email": {
+    "message_id": "neg-05-calendar-invite",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Google Calendar",
+      "email": "calendar-notification@google.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Invitation: Weekly ops standup @ Mon 21 Aug 2026 09:00 (ICT)",
+    "body_text": "You have been invited to the following event.\n\nWeekly ops standup\nWhen: Mon 21 Aug 2026 09:00 – 09:30 (ICT)\nOrganiser: ops@example.com\n\nGoing? Yes / No / Maybe",
+    "signature_block": "",
+    "received_at": "2026-08-19T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "automated",
+      "internal"
+    ]
+  }
+}

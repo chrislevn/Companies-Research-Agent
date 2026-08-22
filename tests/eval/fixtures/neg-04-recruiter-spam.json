@@ -1,0 +1,31 @@
+{
+  "id": "neg-04-recruiter-spam",
+  "class": "negative",
+  "note": "Mass recruiter blast, not a business opportunity.",
+  "email": {
+    "message_id": "neg-04-recruiter-spam",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "TalentBridge Recruiting",
+      "email": "noreply@talentbridge-jobs.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "12 senior engineers available now — exclusive candidates",
+    "body_text": "Hi,\n\nWe have 12 pre-vetted senior engineers available immediately across Vietnam and Singapore. Rates from $28/hour. Reply STOP to opt out.\n\nTalentBridge — connecting talent since 2011",
+    "signature_block": "",
+    "received_at": "2026-08-19T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "recruiter",
+      "newsletter",
+      "automated"
+    ]
+  }
+}

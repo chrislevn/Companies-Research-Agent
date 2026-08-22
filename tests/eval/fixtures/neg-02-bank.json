@@ -1,0 +1,30 @@
+{
+  "id": "neg-02-bank",
+  "class": "negative",
+  "note": "Automated bank notification — the one the local model got confidently wrong.",
+  "email": {
+    "message_id": "neg-02-bank",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Vietcombank",
+      "email": "vcbdigibank@info.vietcombank.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Biên lai chuyển tiền qua tài khoản",
+    "body_text": "Quý khách vừa thực hiện giao dịch chuyển khoản.\nSố tiền: 2,500,000 VND\nThời gian: 19/08/2026 14:22\nSố dư khả dụng: xxx\n\nĐây là email tự động, vui lòng không trả lời.",
+    "signature_block": "",
+    "received_at": "2026-08-19T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "automated",
+      "newsletter"
+    ]
+  }
+}

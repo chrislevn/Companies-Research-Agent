@@ -1,0 +1,33 @@
+{
+  "id": "lead-07",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-07",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Elena Vasquez",
+      "email": "elena@brightpathhr.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Can we help with your Q4 hiring?",
+    "body_text": "Hi there,\n\nBrightPath HR runs recruitment for engineering teams in Vietnam and Singapore. You mentioned on LinkedIn that you're growing the team — happy to share what we're seeing on salary bands. Free for a call Tuesday?\n\nElena",
+    "signature_block": "Elena Vasquez, Managing Director, BrightPath HR, brightpathhr.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": "BrightPath HR",
+    "domain": "brightpathhr.example",
+    "contact_name": "Elena Vasquez"
+  }
+}

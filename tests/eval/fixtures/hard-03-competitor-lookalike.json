@@ -1,0 +1,41 @@
+{
+  "id": "hard-03-competitor-lookalike",
+  "class": "hard",
+  "note": "Domain differs from a much larger firm by one character.",
+  "email": {
+    "message_id": "hard-03-competitor-lookalike",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Rob Whitfield",
+      "email": "rob@datab0x.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Storage pricing for your archive tier",
+    "body_text": "Hi,\n\nDatab0x (with a zero — we are not Databox, we get their support tickets weekly) offers cold storage at $0.9/TB/month. Worth a look for your archive tier?\n\nRob",
+    "signature_block": "Rob Whitfield · Datab0x · datab0x.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor"
+    ],
+    "company_name": [
+      "Datab0x",
+      "Databox"
+    ],
+    "domain": "datab0x.example",
+    "contact_name": "Rob Whitfield"
+  },
+  "expected_research": {
+    "no_fabricated_claims": true,
+    "must_not_contain": [
+      "databox.com"
+    ]
+  }
+}

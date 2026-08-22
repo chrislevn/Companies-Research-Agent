@@ -1,0 +1,43 @@
+{
+  "id": "hard-01-no-website",
+  "class": "hard",
+  "note": "Real business, no website at all — the domain must stay empty rather than being guessed.",
+  "email": {
+    "message_id": "hard-01-no-website",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Bùi Văn Sơn",
+      "email": "sonbui.carpentry@gmail.com"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Nhận gia công đồ gỗ nội thất",
+    "body_text": "Chào anh,\n\nXưởng của em nhận gia công đồ gỗ nội thất theo yêu cầu, đã làm cho vài quán cà phê ở quận 7. Bên em chưa có website, anh liên hệ qua số 0901xxxxxx hoặc email này ạ.\n\nSơn",
+    "signature_block": "Sơn — Xưởng mộc Sơn Bùi — 0901xxxxxx",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "vendor",
+      "unknown",
+      "personal"
+    ],
+    "domain": "",
+    "contact_name": [
+      "Bùi Văn Sơn",
+      "Sơn"
+    ]
+  },
+  "expected_research": {
+    "no_fabricated_claims": true,
+    "must_not_contain": [
+      "sonbui.com",
+      "gmail.com"
+    ]
+  }
+}

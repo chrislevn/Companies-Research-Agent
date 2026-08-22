@@ -1,0 +1,34 @@
+{
+  "id": "lead-04",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-04",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Priya Raman",
+      "email": "priya@lumenanalytics.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Following up on our conversation at DataCon",
+    "body_text": "Hi — great meeting you at DataCon last week. As promised, here's a bit more on what Lumen Analytics does: we build churn models for subscription businesses. Shall I send over a proposal?\n\nPriya",
+    "signature_block": "Priya Raman | Founder | Lumen Analytics",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner",
+      "customer"
+    ],
+    "company_name": "Lumen Analytics",
+    "domain": "lumenanalytics.example",
+    "contact_name": "Priya Raman"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "neg-03-receipt",
+  "class": "negative",
+  "note": "Purchase receipt from a vendor you already use.",
+  "email": {
+    "message_id": "neg-03-receipt",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Anthropic",
+      "email": "billing@anthropic.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Your receipt from Anthropic — $47.20",
+    "body_text": "Thanks for your payment.\n\nAmount: $47.20\nInvoice: INV-20260819-4471\nPayment method: card ending 4242\n\nThis is an automated message.",
+    "signature_block": "",
+    "received_at": "2026-08-19T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "automated",
+      "vendor"
+    ]
+  }
+}

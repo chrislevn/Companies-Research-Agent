@@ -1,0 +1,96 @@
+{
+  "hard-01-no-website": {
+    "confidence": 0.05,
+    "description": "",
+    "domain": "",
+    "field_sources": [],
+    "founded": "",
+    "hq_location": "",
+    "industry": "",
+    "meeting_prep": [
+      "Chưa xác minh được website hay trang chính thức của xưởng — nên hỏi trực tiếp họ về địa chỉ xưởng, quy mô nhân công và năng lực sản xuất mỗi tháng.",
+      "Hỏi họ nhận việc theo hướng nào: đóng nội thất theo yêu cầu cho nhà dân, thi công theo hồ sơ thiết kế của kiến trúc sư, hay gia công cho đối tác khác.",
+      "Hỏi nguồn gỗ và giấy tờ nguồn gốc (gỗ tự nhiên nhập khẩu, gỗ công nghiệp), vì đây thường là điểm quyết định giá và tiến độ.",
+      "Hỏi về thời gian thi công điển hình, chính sách bảo hành và cách xử lý khi gỗ co ngót/nứt sau khi lắp đặt.",
+      "Đề nghị xem ảnh/địa chỉ các công trình đã hoàn thành gần đây để đánh giá tay nghề trước khi cam kết."
+    ],
+    "name": "Xưởng mộc Sơn Bùi",
+    "news": [],
+    "notes": "Không tìm được nguồn xác thực nào cho đơn vị tên \"Xưởng mộc Sơn Bùi\": không có tên miền, trang web hay trang mạng xã hội chính thức được xác minh. Kết quả tìm kiếm chỉ trả về các bài báo không liên quan (một vụ án liên quan đến người tên Bùi Trường Sơn ở Đắk Lắk, và một bài về xưởng mộc làm cột cho nhà thờ Bùi Chu) — không có bằng chứng nào cho thấy đây là cùng một đơn vị. Đây có thể là một xưởng mộc nhỏ, hộ kinh doanh gia đình tại Việt Nam, hầu như không có dấu vết trực tuyến, hoặc chỉ hiện diện trên Facebook/Zalo mà công cụ tìm kiếm không truy cập được. Cần khách hàng cung cấp đường link hoặc số điện thoại/địa chỉ để nghiên cứu tiếp. Mọi thông tin về sản phẩm, quy mô, năm thành lập đều để trống vì không có nguồn.",
+    "one_liner": "",
+    "products": [],
+    "size_estimate": "",
+    "sources": [
+      "https://congan.com.vn/vu-an/bi-mat-cua-xuong-moc-an-nen-lam-ra_122251.html",
+      "https://tuoitre.vn/vao-xuong-moc-lam-ruong-cot-moi-cho-nha-tho-bui-chu-20200206035130877.htm"
+    ]
+  },
+  "hard-02-ambiguous-name": {
+    "confidence": 0.05,
+    "description": "",
+    "domain": "meridian-systems.example",
+    "field_sources": [],
+    "founded": "",
+    "hq_location": "",
+    "industry": "",
+    "meeting_prep": [
+      "Before the meeting, confirm the company's real website and legal entity — the domain supplied (meridian-systems.example) is not a resolvable address, so nothing in this brief could be verified against their own material.",
+      "Ask which Meridian Systems this is: at least two unrelated entities use the name (a Folsom, California construction project-management software firm acquired by Trimble, and a US energy management/HVAC controls company), so ask directly what they build and who their customers are.",
+      "Treat basics as open questions rather than assumptions: headquarters, headcount, founding year, ownership, and current product line all need to come from them."
+    ],
+    "name": "Meridian Systems",
+    "news": [],
+    "notes": "The supplied domain uses the reserved .example TLD, which by definition cannot host a real site, so no primary source was retrievable and no factual fields are filled. A general web search surfaced at least two distinct real companies named Meridian Systems — a project-management software provider in Folsom, California that became part of Trimble, and an energy management/HVAC controls firm — but neither can be matched to the domain given, and I have not attributed any claims to them. Everything is missing: products, size, location, founding, news. Re-run once a valid domain is available.",
+    "one_liner": "",
+    "products": [],
+    "size_estimate": "",
+    "sources": []
+  },
+  "hard-03-competitor-lookalike": {
+    "confidence": 0.05,
+    "description": "",
+    "domain": "datab0x.example",
+    "field_sources": [],
+    "founded": "",
+    "hq_location": "",
+    "industry": "",
+    "meeting_prep": [
+      "Before the meeting, ask the counterparty for their real website — the domain supplied (datab0x.example) is in the reserved .example TLD, which cannot resolve to a live site, so no primary source could be checked.",
+      "Confirm the exact legal/trading name and spelling ('Datab0x' with a zero is unusual and may be a stylisation, a typo, or a placeholder), since several similarly named data companies exist.",
+      "Treat any inbound message from this domain with caution: reserved-TLD addresses are not deliverable and can indicate a test record, a placeholder in a CRM, or a spoofed contact."
+    ],
+    "name": "Datab0x",
+    "news": [],
+    "notes": "No verifiable information found. The supplied domain datab0x.example uses the .example top-level domain, which is reserved by IANA/RFC 2606 for documentation and examples and never resolves to a real website, so the company's own pages could not be retrieved. A web search for the name returned only unrelated data companies (DataStax, Datavant, Dataupia) with no match for 'Datab0x'. Everything is left empty deliberately: no primary or secondary source supports any claim about this entity. To proceed, a real domain or a jurisdiction plus registered company name is needed.",
+    "one_liner": "",
+    "products": [],
+    "size_estimate": "",
+    "sources": [
+      "https://en.wikipedia.org/wiki/List_of_big_data_companies"
+    ]
+  },
+  "hard-04-dead-site": {
+    "confidence": 0.1,
+    "description": "",
+    "domain": "nordhavn-marine.example",
+    "field_sources": [],
+    "founded": "",
+    "hq_location": "",
+    "industry": "",
+    "meeting_prep": [
+      "Before the meeting, ask for the company's real website — the domain provided (nordhavn-marine.example) is in the reserved .example namespace defined for documentation and cannot resolve, so no primary source could be checked.",
+      "Confirm which 'Nordhavn' entity you are dealing with: the name is used by multiple unrelated marine businesses (e.g. a Danish diesel-engine and propulsion supplier trading as NORDHAVN A/S, the Nordhavn long-range motor yacht brand, and Nordhavn as the Copenhagen port district), so identity should be settled in the first minutes.",
+      "Ask them directly to state their line of business, headquarters, size and flagship products — none of this could be independently verified, so treat anything said as unconfirmed until documentation follows.",
+      "If they claim a Copenhagen/Nordhavn connection, clarify whether that is a legal domicile, a shipyard/service location, or just branding drawn from the district name."
+    ],
+    "name": "Nordhavn Marine",
+    "news": [],
+    "notes": "No brief could be substantiated. The supplied domain 'nordhavn-marine.example' uses the reserved .example top-level domain (set aside for documentation and testing) and therefore has no live website to read; nothing about this specific company could be sourced from a primary page. A search for the name returns only unrelated or ambiguous marine entities — most notably a Danish supplier of diesel engines and propulsion units described on a third-party supplier directory (ShipServ), which is an aggregator and not evidence about the company in question. All descriptive fields are intentionally left empty rather than filled by inference. To produce a real brief, the correct website domain or legal entity name/registration number is needed.",
+    "one_liner": "",
+    "products": [],
+    "size_estimate": "",
+    "sources": [
+      "https://www.shipserv.com/brand/nordhavn/12476"
+    ]
+  }
+}

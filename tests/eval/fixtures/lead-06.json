@@ -1,0 +1,33 @@
+{
+  "id": "lead-06",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-06",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Yuki Tanaka",
+      "email": "y.tanaka@sakuraforge.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Supplier enquiry — precision components",
+    "body_text": "Dear Sir or Madam,\n\nSakuraForge manufactures precision machined components. We are expanding into the Southeast Asian market and are seeking distribution partners. Please let me know if this is of interest.\n\nYuki Tanaka",
+    "signature_block": "Yuki Tanaka | Export Manager | SakuraForge Co., Ltd | sakuraforge.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner"
+    ],
+    "company_name": "SakuraForge",
+    "domain": "sakuraforge.example",
+    "contact_name": "Yuki Tanaka"
+  }
+}

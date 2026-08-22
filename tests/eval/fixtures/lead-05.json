@@ -1,0 +1,33 @@
+{
+  "id": "lead-05",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-05",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Marcus Feld",
+      "email": "marcus.feld@aldergrove-capital.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Introduction — Aldergrove Capital",
+    "body_text": "Good morning,\n\nAldergrove Capital invests in early-stage logistics software. We've been following your progress and would like to open a conversation. Would you have time for a call in the next fortnight?\n\nMarcus Feld",
+    "signature_block": "Marcus Feld · Principal · Aldergrove Capital · aldergrove-capital.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "partner",
+      "customer"
+    ],
+    "company_name": "Aldergrove Capital",
+    "domain": "aldergrove-capital.example",
+    "contact_name": "Marcus Feld"
+  }
+}

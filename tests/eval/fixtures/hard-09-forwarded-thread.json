@@ -1,0 +1,39 @@
+{
+  "id": "hard-09-forwarded-thread",
+  "class": "hard",
+  "note": "A forwarded chain — the real sender is not the top-of-thread one.",
+  "email": {
+    "message_id": "hard-09-forwarded-thread",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Alex Prior",
+      "email": "alex.prior@example.com"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Fwd: Intro — Castlebridge Timber",
+    "body_text": "Passing this on, looks relevant to you.\n\n--- Forwarded message ---\nFrom: Fiona Blake <fiona@castlebridge-timber.example>\nSubject: Intro — Castlebridge Timber\n\nHello, Castlebridge Timber supplies FSC-certified hardwood to furniture manufacturers across Europe. We are looking for Asian distribution.\nFiona Blake, Export Director, Castlebridge Timber",
+    "signature_block": "Alex",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor",
+      "partner",
+      "unknown"
+    ],
+    "company_name": [
+      "Castlebridge Timber",
+      ""
+    ],
+    "domain": [
+      "castlebridge-timber.example",
+      ""
+    ]
+  }
+}

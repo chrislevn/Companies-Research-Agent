@@ -1,0 +1,33 @@
+{
+  "id": "lead-03",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-03",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Daniel Okoro",
+      "email": "d.okoro@harborpay.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Partnership: embedded payments for your marketplace",
+    "body_text": "Hello,\n\nHarborPay provides embedded payment rails for marketplaces. We've worked with three companies in your sector and think there's a fit. Are you open to a short intro call?\n\nDaniel",
+    "signature_block": "Daniel Okoro, Partnerships Lead, HarborPay — harborpay.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "partner",
+      "vendor"
+    ],
+    "company_name": "HarborPay",
+    "domain": "harborpay.example",
+    "contact_name": "Daniel Okoro"
+  }
+}

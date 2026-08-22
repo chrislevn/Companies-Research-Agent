@@ -1,0 +1,33 @@
+{
+  "id": "lead-01",
+  "class": "lead",
+  "note": "",
+  "email": {
+    "message_id": "lead-01",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Sarah Chen",
+      "email": "sarah.chen@northwind-logistics.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Demo request — fleet tracking for Q4",
+    "body_text": "Hi,\n\nI lead operations at Northwind Logistics. We're evaluating fleet tracking vendors this quarter and your platform came up twice in our shortlist. Could we get a 30-minute demo next week? Thursday or Friday both work.\n\nBest,\nSarah",
+    "signature_block": "Sarah Chen | Head of Operations | Northwind Logistics | northwind-logistics.example",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer",
+      "partner"
+    ],
+    "company_name": "Northwind Logistics",
+    "domain": "northwind-logistics.example",
+    "contact_name": "Sarah Chen"
+  }
+}

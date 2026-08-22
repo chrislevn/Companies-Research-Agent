@@ -1,0 +1,39 @@
+{
+  "id": "hard-04-dead-site",
+  "class": "hard",
+  "note": "Domain resolves to nothing; research must return an honest gap.",
+  "email": {
+    "message_id": "hard-04-dead-site",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Ingrid Halvorsen",
+      "email": "ingrid@nordhavn-marine.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Marine coatings — enquiry",
+    "body_text": "Good afternoon,\n\nNordhavn Marine supplies anti-fouling coatings for commercial vessels. Our site is being rebuilt at the moment, apologies. Can I send a catalogue by email?\n\nIngrid",
+    "signature_block": "Ingrid Halvorsen, Sales, Nordhavn Marine",
+    "received_at": "2026-08-18T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "vendor"
+    ],
+    "company_name": "Nordhavn Marine",
+    "domain": "nordhavn-marine.example",
+    "contact_name": "Ingrid Halvorsen"
+  },
+  "expected_research": {
+    "no_fabricated_claims": true,
+    "must_not_contain": [
+      "founded in 19",
+      "employees: "
+    ]
+  }
+}
