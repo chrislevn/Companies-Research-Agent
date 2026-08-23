@@ -1027,9 +1027,15 @@ function wire() {
     };
   });
 
-  $$(".tab").forEach((tab) => {
+  /* Scoped to its own container. As a bare `.tab` selector this claimed every
+     tab on the page — including the settings nav and the prompt switcher — and
+     because it is wired last, `.onclick =` silently replaced their handlers.
+     The underline still moved, so it looked like it worked while every section
+     showed the same content. */
+  const mailboxTabs = $$("#mailbox-tabs .tab");
+  mailboxTabs.forEach((tab) => {
     tab.onclick = () => {
-      $$(".tab").forEach((other) => other.classList.toggle("active", other === tab));
+      mailboxTabs.forEach((other) => other.classList.toggle("active", other === tab));
       $$(".tabpanel").forEach((panel) => { panel.hidden = panel.dataset.panel !== tab.dataset.tab; });
     };
   });
