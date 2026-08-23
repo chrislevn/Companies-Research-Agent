@@ -105,6 +105,53 @@ class TriageBatch(BaseModel):
     results: list[TriageResult]
 
 
+class OrgProfile(BaseModel):
+    """Who *you* are — the missing half of every relevance judgement.
+
+    Without this the agent can only ask "is this a real person from a company".
+    With it, it can ask the question that actually matters: "is this company
+    worth *our* time". A logistics firm and a design studio get identical
+    inbound mail and should reach opposite conclusions about most of it.
+
+    Deliberately small. This is a page of text that goes into the prompt whole —
+    there is no retrieval step, because there is nothing to retrieve from. A
+    vector store for six paragraphs would add moving parts and answer no
+    question that including the text does not already answer.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(default="", description="Your company name.")
+    domain: str = Field(default="", description="Your website domain.")
+    what_we_do: str = Field(
+        default="", description="What you sell, in a sentence or two."
+    )
+    ideal_customer: str = Field(
+        default="", description="Who you want to hear from — the profile of a good lead."
+    )
+    target_industries: list[str] = Field(default_factory=list)
+    target_regions: list[str] = Field(default_factory=list)
+    target_company_sizes: list[str] = Field(
+        default_factory=list, description="e.g. '50-200', 'enterprise'."
+    )
+    not_interested_in: list[str] = Field(
+        default_factory=list,
+        description="Kinds of approach that are never worth a brief, in your words.",
+    )
+    research_criteria: str = Field(
+        default="",
+        description="What to dig into for every company: the questions you always ask.",
+    )
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.name or self.what_we_do or self.ideal_customer)
+
+    @property
+    def has_research_criteria(self) -> bool:
+        return bool(self.research_criteria.strip())
+
+
 class MeetingRef(BaseModel):
     """An upcoming calendar event that looks like it involves this company.
 

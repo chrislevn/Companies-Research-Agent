@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .. import prompts
+from .. import org, prompts
 from .. import tools as harness
 from ..config import SETTINGS
 from ..models import CompanyProfile
@@ -97,6 +97,7 @@ class ClaudeWebResearch:
         # Loaded per lookup, not at import, so editing prompts/research.md takes
         # effect on the next company without restarting a running watcher.
         prompt = prompts.load("research", DEFAULT_SYSTEM_PROMPT)
+        criteria = org.render_for_research()
         if prompt.customised:
             log.info("  using custom research prompt (%s)", prompt.source)
 
@@ -129,7 +130,7 @@ class ClaudeWebResearch:
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=16000,
-                    system=prompt.text,
+                    system=prompt.text + criteria,
                     tools=api_tools,
                     output_config={
                         "format": {"type": "json_schema", "schema": json_schema_for(CompanyProfile)},

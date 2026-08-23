@@ -147,6 +147,7 @@ class Settings:
     tracing_enabled: bool = False
     otlp_endpoint: str = "http://localhost:4318/v1/traces"
     prompts_dir: Path = ROOT / "prompts"
+    org_profile_file: Path = ROOT / "profile.json"
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
     allowed_recipients: list[str] = field(default_factory=list)
@@ -230,6 +231,7 @@ def load_settings() -> Settings:
         tracing_enabled=_bool("TRACING_ENABLED", False),
         otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4318/v1/traces"),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
+        org_profile_file=_path("ORG_PROFILE_FILE", "profile.json"),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
         allowed_recipients=_csv("ALLOWED_RECIPIENTS"),

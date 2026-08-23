@@ -10,7 +10,7 @@ import logging
 import time
 from typing import Callable, Sequence
 
-from .. import prompts
+from .. import org, prompts
 from ..config import SETTINGS
 from ..models import EmailMessage, Relationship, TriageBatch, TriageResult
 from ..schema_utils import json_schema_for
@@ -131,9 +131,10 @@ class TriageAgent:
         # batch, not the next restart.
         prompt = prompts.load("triage", SYSTEM_PROMPT)
         completion = self.backend.complete(
-            # The clause is appended after any customisation, so a replaced
-            # prompt cannot drop the one instruction that matters here.
-            system=prompt.text + prompts.UNTRUSTED_CLAUSE,
+            # Order matters: the operator's profile is trusted context, and the
+            # untrusted-content clause comes last so a replaced prompt cannot
+            # drop the one instruction that keeps the two apart.
+            system=prompt.text + org.render_for_triage() + prompts.UNTRUSTED_CLAUSE,
             user=_render_batch(batch),
             schema=json_schema_for(TriageBatch),
         )

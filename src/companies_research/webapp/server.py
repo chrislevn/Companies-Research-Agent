@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..accounts import AccountsError
-from ..config import SETTINGS, set_env_values
+from ..config import ALL_TOOL_SCOPES, SETTINGS, set_env_values
 from ..pipeline import seed_known_senders, start_watching
 from ..store import Store
 from . import mailboxes
@@ -112,6 +112,16 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # --- state -----------------------------------------------------------------
 
 
+def _ollama_reachable() -> bool:
+    """Is a local model actually there? The UI says so before you pick it."""
+    import httpx
+
+    try:
+        return httpx.get(f"{SETTINGS.ollama_host.rstrip('/')}/api/tags", timeout=1.0).is_success
+    except Exception:
+        return False
+
+
 def _mask(value: str | None) -> str:
     if not value:
         return ""
@@ -172,6 +182,22 @@ def state() -> dict:
             "scan_days": SETTINGS.scan_days,
             "watch_enabled": SETTINGS.watch_enabled,
             "watch_interval_minutes": SETTINGS.watch_interval_minutes,
+            "triage_backend": SETTINGS.triage_backend,
+            "ollama_model": SETTINGS.ollama_model,
+            "ollama_host": SETTINGS.ollama_host,
+            "research_enabled": SETTINGS.research_enabled,
+            "research_effort": SETTINGS.research_effort,
+            "research_max_searches": SETTINGS.research_max_searches,
+            "research_max_companies": SETTINGS.research_max_companies,
+            "research_ttl_days": SETTINGS.research_ttl_days,
+            "calendar_enabled": SETTINGS.calendar_enabled,
+            "calendar_lookahead_days": SETTINGS.calendar_lookahead_days,
+            "delivery_provider": SETTINGS.delivery_provider,
+            "delivery_account": SETTINGS.delivery_account,
+            "allowed_recipients": sorted(SETTINGS.recipient_allowlist),
+            "tool_scopes": sorted(SETTINGS.tool_scopes),
+            "all_tool_scopes": sorted(ALL_TOOL_SCOPES),
+            "ollama_reachable": _ollama_reachable(),
         },
         "watcher_running": WATCHER.running,
         "job": job.as_dict() if job else None,
@@ -301,6 +327,72 @@ def generate_brief(payload: dict = Body(default={})) -> dict:
     return {"id": store.save_brief(brief), "domain": domain}
 
 
+@app.get("/api/prompts")
+def get_prompts() -> dict:
+    from .. import prompts
+    from ..agents.triage import SYSTEM_PROMPT as TRIAGE_DEFAULT
+    from ..research.claude_web import DEFAULT_SYSTEM_PROMPT as RESEARCH_DEFAULT
+
+    out = {}
+    for name, default in (("triage", TRIAGE_DEFAULT), ("research", RESEARCH_DEFAULT)):
+        loaded = prompts.load(name, default)
+        out[name] = {
+            "text": loaded.text, "source": loaded.source,
+            "customised": loaded.customised, "default": default,
+        }
+    return {"prompts": out}
+
+
+@app.post("/api/prompts/{name}")
+def set_prompt(name: str, payload: dict = Body(...)) -> dict:
+    """Write or reset one prompt. Empty text restores the built-in."""
+    from .. import prompts
+    from ..agents.triage import SYSTEM_PROMPT as TRIAGE_DEFAULT
+    from ..research.claude_web import DEFAULT_SYSTEM_PROMPT as RESEARCH_DEFAULT
+
+    defaults = {"triage": TRIAGE_DEFAULT, "research": RESEARCH_DEFAULT}
+    if name not in defaults:
+        raise HTTPException(404, f"No prompt called {name!r}.")
+
+    text = str(payload.get("text", "")).strip()
+    path = prompts.prompt_path(name)
+    if not text:
+        path.unlink(missing_ok=True)      # back to the built-in
+        return {"ok": True, "customised": False}
+
+    # Same scrub the loader applies, done here so the file on disk is clean too.
+    cleaned = prompts.scrub_credentials(text, where=f"prompts/{name}.md")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(cleaned.rstrip() + "\n", encoding="utf-8")
+    return {"ok": True, "customised": True, "redacted": cleaned != text}
+
+
+@app.get("/api/profile")
+def get_profile() -> dict:
+    from .. import org
+
+    profile = org.load()
+    return {"profile": profile.model_dump(), "configured": profile.configured}
+
+
+@app.post("/api/profile")
+def set_profile(payload: dict = Body(...)) -> dict:
+    """Save the operator's own company profile.
+
+    Validated through the same Pydantic model the prompts read, so a malformed
+    save fails here rather than producing a prompt nobody can explain.
+    """
+    from .. import org
+    from ..models import OrgProfile
+
+    try:
+        profile = OrgProfile.model_validate(payload.get("profile") or {})
+    except Exception as exc:
+        raise HTTPException(400, f"That profile could not be saved: {exc}") from None
+    org.save(profile)
+    return {"ok": True, "configured": profile.configured}
+
+
 @app.get("/api/presets")
 def presets() -> dict:
     return {"presets": mailboxes.presets_payload()}
@@ -405,8 +497,78 @@ def update_settings(payload: dict = Body(...)) -> dict:
         values["WATCH_ENABLED"] = "1" if payload["watch_enabled"] else "0"
     if "watch_interval_minutes" in payload:
         values["WATCH_INTERVAL_MINUTES"] = str(max(1, int(payload["watch_interval_minutes"])))
+
+    # --- where triage runs ---
+    if "triage_backend" in payload:
+        backend = str(payload["triage_backend"]).strip().lower()
+        if backend not in ("anthropic", "ollama"):
+            raise HTTPException(400, "Triage runs either on the Claude API or on Ollama.")
+        values["TRIAGE_BACKEND"] = backend
+    if "ollama_model" in payload:
+        values["OLLAMA_MODEL"] = str(payload["ollama_model"]).strip()
+    if "ollama_host" in payload:
+        values["OLLAMA_HOST"] = str(payload["ollama_host"]).strip()
+
+    # --- research ---
+    if "research_enabled" in payload:
+        values["RESEARCH_ENABLED"] = "1" if payload["research_enabled"] else "0"
+    if "research_effort" in payload:
+        effort = str(payload["research_effort"]).strip().lower()
+        if effort not in ("low", "medium", "high", "xhigh", "max"):
+            raise HTTPException(400, "Effort must be low, medium, high, xhigh or max.")
+        values["RESEARCH_EFFORT"] = effort
+    if "research_max_searches" in payload:
+        values["RESEARCH_MAX_SEARCHES"] = str(max(1, int(payload["research_max_searches"])))
+    if "research_max_companies" in payload:
+        values["RESEARCH_MAX_COMPANIES"] = str(max(1, int(payload["research_max_companies"])))
+    if "research_ttl_days" in payload:
+        values["RESEARCH_TTL_DAYS"] = str(max(1, int(payload["research_ttl_days"])))
+
+    # --- calendar ---
+    if "calendar_enabled" in payload:
+        values["CALENDAR_ENABLED"] = "1" if payload["calendar_enabled"] else "0"
+    if "calendar_lookahead_days" in payload:
+        values["CALENDAR_LOOKAHEAD_DAYS"] = str(max(1, int(payload["calendar_lookahead_days"])))
+
+    # --- delivery and the permission gate ---
+    if "delivery_provider" in payload:
+        provider = str(payload["delivery_provider"]).strip().lower()
+        if provider not in ("file", "gmail_send"):
+            raise HTTPException(400, "Delivery is either a local file or a separate Gmail account.")
+        values["DELIVERY_PROVIDER"] = provider
+    if "delivery_account" in payload:
+        values["DELIVERY_ACCOUNT"] = str(payload["delivery_account"]).strip()
+    if "allowed_recipients" in payload:
+        raw = payload["allowed_recipients"]
+        items = raw if isinstance(raw, list) else str(raw).split(",")
+        values["ALLOWED_RECIPIENTS"] = ",".join(
+            sorted({a.strip().lower() for a in items if a.strip()})
+        )
+    if "tool_scopes" in payload:
+        from ..config import ALL_TOOL_SCOPES
+
+        raw = payload["tool_scopes"]
+        items = raw if isinstance(raw, list) else str(raw).split(",")
+        asked = {s.strip().lower() for s in items if s.strip()}
+        unknown = asked - ALL_TOOL_SCOPES
+        if unknown:
+            raise HTTPException(400, f"Unknown permission(s): {', '.join(sorted(unknown))}")
+        # Turning delivery on with nowhere safe to send it is a footgun, not a
+        # setting: refuse rather than let the gate be the one to say no later.
+        if "brief:deliver" in asked:
+            allowed = values.get("ALLOWED_RECIPIENTS")
+            if allowed is None:
+                allowed = ",".join(sorted(SETTINGS.recipient_allowlist))
+            if not allowed:
+                raise HTTPException(
+                    400,
+                    "Add at least one allowed recipient before turning on sending — "
+                    "otherwise every delivery would be refused anyway.",
+                )
+        values["TOOL_SCOPES"] = ",".join(sorted(asked))
+
     set_env_values(values)
-    return {"ok": True}
+    return {"ok": True, "changed": sorted(values)}
 
 
 @app.post("/api/purge")

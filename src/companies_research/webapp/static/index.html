@@ -203,6 +203,76 @@
     <p class="error" id="settings-key-error" hidden></p>
   </article>
 
+  <!-- Who the operator is. Without this the agent can only judge whether a
+       sender is a real business; with it, whether they are worth this
+       business's time. -->
+  <article class="card" id="card-org">
+    <h2 data-i18n="org.title">Your company</h2>
+    <p class="muted" data-i18n="org.blurb">The agent compares every new sender against this to decide whether they are worth researching. Leave it blank and it falls back to judging whether the sender is a real business at all.</p>
+
+    <div class="two-col">
+      <label class="field">
+        <span data-i18n="org.name">Company name</span>
+        <input id="org-name" placeholder="Acme Freight">
+      </label>
+      <label class="field">
+        <span data-i18n="org.domain">Website domain</span>
+        <input id="org-domain" placeholder="acme.com">
+      </label>
+    </div>
+
+    <label class="field">
+      <span data-i18n="org.what">What you do</span>
+      <textarea id="org-what" rows="2" placeholder="Sea and air freight forwarding out of Vietnam."></textarea>
+    </label>
+
+    <label class="field">
+      <span data-i18n="org.icp">Who you want to hear from</span>
+      <textarea id="org-icp" rows="2" placeholder="Manufacturers shipping 20+ containers a year to Europe."></textarea>
+      <small class="muted" data-i18n="org.icp.note">The single most useful box here. This is what turns "a real company wrote to you" into "this one is worth your time".</small>
+    </label>
+
+    <div class="two-col">
+      <label class="field">
+        <span data-i18n="org.industries">Target industries</span>
+        <input id="org-industries" placeholder="manufacturing, textiles">
+        <small class="muted" data-i18n="org.comma">Separate with commas.</small>
+      </label>
+      <label class="field">
+        <span data-i18n="org.regions">Target regions</span>
+        <input id="org-regions" placeholder="Vietnam, EU">
+      </label>
+    </div>
+
+    <div class="two-col">
+      <label class="field">
+        <span data-i18n="org.sizes">Target company sizes</span>
+        <input id="org-sizes" placeholder="50-200, enterprise">
+      </label>
+      <label class="field">
+        <span data-i18n="org.never">Never worth a brief</span>
+        <input id="org-never" placeholder="recruitment agencies, SEO services">
+      </label>
+    </div>
+
+    <p class="muted small" data-i18n="org.honest">A sender outside all of this is still recorded honestly — real business, correct relationship — just not flagged for research. Relevance and legitimacy are different questions.</p>
+
+    <h3 data-i18n="org.research">What to research</h3>
+    <label class="field">
+      <span data-i18n="org.criteria">Questions to ask about every company</span>
+      <textarea id="org-criteria" rows="5" placeholder="Always check:
+- annual shipping volume, and to which ports
+- who their current freight forwarder is
+- whether they have EU customs exposure
+- any recent funding or expansion news"></textarea>
+      <small class="muted" data-i18n="org.criteria.note">Appended to the research prompt for every company. Standing questions, not a licence to guess — anything a page does not answer stays empty and is listed as a gap.</small>
+    </label>
+
+    <button class="btn primary" id="org-save" data-i18n="org.save">Save company profile</button>
+    <span class="muted small" id="org-status"></span>
+    <p class="error" id="org-error" hidden></p>
+  </article>
+
   <article class="card">
     <h2 data-i18n="settings.watch">Checking for new mail</h2>
     <label class="check">
@@ -219,6 +289,133 @@
       </select>
     </label>
     <p class="muted small" data-i18n="settings.watch.note">Only mail that arrives from now on is ever looked at, so checking often costs nothing when nothing has come in.</p>
+  </article>
+
+  <!-- Where triage runs. The choice is a privacy decision, so it says what it
+       means rather than naming two backends and leaving you to infer. -->
+  <article class="card">
+    <h2 data-i18n="cfg.triage">Reading your mail</h2>
+    <label class="radio">
+      <input type="radio" name="backend" value="anthropic" id="backend-anthropic">
+      <span><strong data-i18n="cfg.triage.api">Claude API</strong> —
+        <span class="muted" data-i18n="cfg.triage.api.note">most accurate. Message bodies are sent to Anthropic.</span></span>
+    </label>
+    <label class="radio">
+      <input type="radio" name="backend" value="ollama" id="backend-ollama">
+      <span><strong data-i18n="cfg.triage.local">A model on this computer</strong> —
+        <span class="muted" data-i18n="cfg.triage.local.note">nothing leaves the machine. Free, slower, less accurate.</span></span>
+    </label>
+    <div id="ollama-fields" class="indent" hidden>
+      <div class="two-col">
+        <label class="field">
+          <span data-i18n="cfg.ollama.model">Local model</span>
+          <input id="ollama-model" placeholder="qwen3:8b">
+          <small class="muted" data-i18n="cfg.ollama.note">Use a general instruct model. Coder-tuned models mislabel business email.</small>
+        </label>
+        <label class="field">
+          <span data-i18n="cfg.ollama.host">Ollama address</span>
+          <input id="ollama-host" placeholder="http://localhost:11434">
+        </label>
+      </div>
+      <p class="muted small" id="ollama-status"></p>
+    </div>
+  </article>
+
+  <article class="card">
+    <h2 data-i18n="cfg.research">Researching companies</h2>
+    <label class="check">
+      <input type="checkbox" id="research-enabled">
+      <span data-i18n="cfg.research.on">Look up each lead's company</span>
+    </label>
+    <div class="two-col">
+      <label class="field">
+        <span data-i18n="cfg.research.effort">How hard to look</span>
+        <select id="research-effort">
+          <option value="low" data-i18n="cfg.effort.low">Quick — about a minute per company</option>
+          <option value="medium" data-i18n="cfg.effort.medium">Thorough — several minutes</option>
+          <option value="high" data-i18n="cfg.effort.high">Exhaustive — slowest, most expensive</option>
+        </select>
+      </label>
+      <label class="field">
+        <span data-i18n="cfg.research.searches">Searches per company</span>
+        <input id="research-searches" type="number" min="1" max="20">
+        <small class="muted" data-i18n="cfg.research.searches.note">Each search is billed. Three is usually enough.</small>
+      </label>
+    </div>
+    <div class="two-col">
+      <label class="field">
+        <span data-i18n="cfg.research.companies">Companies per check</span>
+        <input id="research-companies" type="number" min="1" max="50">
+        <small class="muted" data-i18n="cfg.research.companies.note">The rest wait for the next run, and the log says so.</small>
+      </label>
+      <label class="field">
+        <span data-i18n="cfg.research.ttl">Reuse a profile for</span>
+        <input id="research-ttl" type="number" min="1" max="365">
+        <small class="muted" data-i18n="cfg.research.ttl.days">days</small>
+      </label>
+    </div>
+  </article>
+
+  <article class="card">
+    <h2 data-i18n="cfg.calendar">Checking your calendar</h2>
+    <label class="check">
+      <input type="checkbox" id="calendar-enabled">
+      <span data-i18n="cfg.calendar.on">Look for meetings already booked with a lead</span>
+    </label>
+    <label class="field narrow">
+      <span data-i18n="cfg.calendar.days">How far ahead to look</span>
+      <input id="calendar-days" type="number" min="1" max="365">
+    </label>
+    <p class="muted small" data-i18n="cfg.calendar.note">Uses the calendar permission you already granted at sign-in. Nothing new to approve.</p>
+  </article>
+
+  <!-- The gate, in plain words. This is the security boundary, so it is stated
+       in terms of consequences rather than scope names. -->
+  <article class="card" id="card-permissions">
+    <h2 data-i18n="cfg.perms">What the agent is allowed to do</h2>
+    <p class="muted" data-i18n="cfg.perms.blurb">Every action passes a check against this list. An email that tries to talk the agent into doing something else fails here, because nothing an email says can grant a permission.</p>
+    <div id="scope-list"></div>
+
+    <div id="deliver-fields" class="indent" hidden>
+      <label class="field">
+        <span data-i18n="cfg.perms.recipients">Allowed recipients</span>
+        <input id="allowed-recipients" placeholder="you@example.com">
+        <small class="muted" data-i18n="cfg.perms.recipients.note">A brief can be sent to these addresses and no others. Separate with commas.</small>
+      </label>
+      <label class="field narrow">
+        <span data-i18n="cfg.perms.how">How to send</span>
+        <select id="delivery-provider">
+          <option value="file" data-i18n="cfg.perms.file">Save a file on this computer</option>
+          <option value="gmail_send" data-i18n="cfg.perms.gmail">Email it from a separate account</option>
+        </select>
+      </label>
+      <label class="field" id="delivery-account-field" hidden>
+        <span data-i18n="cfg.perms.account">Sending account</span>
+        <input id="delivery-account" placeholder="sending-account-id">
+        <small class="muted" data-i18n="cfg.perms.account.note">Must be a different mailbox from the one being read. The agent refuses to send from a mailbox it reads.</small>
+      </label>
+    </div>
+    <button class="btn" id="perms-save" data-i18n="cfg.perms.save">Save permissions</button>
+    <span class="muted small" id="perms-status"></span>
+    <p class="error" id="perms-error" hidden></p>
+  </article>
+
+  <!-- Prompts, editable without touching a file. -->
+  <article class="card" id="card-prompts">
+    <h2 data-i18n="cfg.prompts">How the agent thinks</h2>
+    <p class="muted" data-i18n="cfg.prompts.blurb">The instructions each step follows. Edit freely — clear a box to go back to the built-in version.</p>
+    <div class="tabs" id="prompt-tabs">
+      <button class="tab active" data-prompt="triage" data-i18n="cfg.prompts.triage">Deciding who matters</button>
+      <button class="tab" data-prompt="research" data-i18n="cfg.prompts.research">Researching a company</button>
+    </div>
+    <p class="muted small" id="prompt-source"></p>
+    <textarea id="prompt-text" rows="16" spellcheck="false"></textarea>
+    <div class="approve-actions">
+      <button class="btn" id="prompt-save" data-i18n="cfg.prompts.save">Save</button>
+      <button class="btn ghost" id="prompt-reset" data-i18n="cfg.prompts.reset">Restore the built-in</button>
+    </div>
+    <span class="muted small" id="prompt-status"></span>
+    <p class="error" id="prompt-error" hidden></p>
   </article>
 
   <article class="card">

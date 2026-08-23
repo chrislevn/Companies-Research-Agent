@@ -357,3 +357,18 @@ pre {
 .approve-block select, .approve-block textarea { width: 100%; margin-bottom: .5rem; }
 .approve-actions { display: flex; gap: .5rem; }
 .ok { color: #15803d; }
+
+/* --- configuration ------------------------------------------------------- */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+@media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+.indent { margin-left: 1.5rem; padding-left: 1rem; border-left: 2px solid var(--line, #e5e7eb); }
+label.radio { display: flex; gap: .55rem; align-items: flex-start; margin-bottom: .6rem; cursor: pointer; }
+label.radio input { margin-top: .25rem; }
+label.check.danger { background: #fef2f2; border: 1px solid #fecaca; border-radius: 5px; padding: .5rem .6rem; }
+#card-permissions label.check { display: flex; gap: .55rem; align-items: flex-start; margin-bottom: .5rem; }
+.tabs { display: flex; gap: .25rem; margin-bottom: .5rem; border-bottom: 1px solid var(--line, #e5e7eb); }
+.tab { background: none; border: none; border-bottom: 2px solid transparent; padding: .45rem .8rem; cursor: pointer; font-size: .88rem; color: inherit; }
+.tab.active { border-bottom-color: var(--accent, #2563eb); font-weight: 600; }
+#prompt-text { width: 100%; font-family: ui-monospace, Menlo, monospace; font-size: .78rem; line-height: 1.5; }
+#card-org textarea, #card-prompts textarea { width: 100%; }
+.warn-text { color: #92400e; }

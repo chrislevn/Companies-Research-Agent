@@ -11,6 +11,8 @@ msal-*.json
 # addresses — commit it deliberately, not by accident.
 accounts.json
 config/accounts.json
+# Describes your business and your customers.
+profile.json
 !accounts.example.json
 
 # Local state

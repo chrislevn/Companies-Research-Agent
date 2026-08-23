@@ -600,7 +600,179 @@ function approvalBlock(brief, delivery) {
 
 // --- settings --------------------------------------------------------------
 
+const asList = (v) => (v || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+async function renderOrgProfile() {
+  let profile;
+  try {
+    profile = (await api("/api/profile")).profile;
+  } catch {
+    return;                       // the rest of Settings still works
+  }
+  $("#org-name").value = profile.name || "";
+  $("#org-domain").value = profile.domain || "";
+  $("#org-what").value = profile.what_we_do || "";
+  $("#org-icp").value = profile.ideal_customer || "";
+  $("#org-industries").value = (profile.target_industries || []).join(", ");
+  $("#org-regions").value = (profile.target_regions || []).join(", ");
+  $("#org-sizes").value = (profile.target_company_sizes || []).join(", ");
+  $("#org-never").value = (profile.not_interested_in || []).join(", ");
+  $("#org-criteria").value = profile.research_criteria || "";
+}
+
+async function saveOrgProfile(button) {
+  const restore = busy(button, "org.saving");
+  showError($("#org-error"), "");
+  try {
+    const out = await api("/api/profile", {
+      method: "POST",
+      body: JSON.stringify({
+        profile: {
+          name: $("#org-name").value.trim(),
+          domain: $("#org-domain").value.trim(),
+          what_we_do: $("#org-what").value.trim(),
+          ideal_customer: $("#org-icp").value.trim(),
+          target_industries: asList($("#org-industries").value),
+          target_regions: asList($("#org-regions").value),
+          target_company_sizes: asList($("#org-sizes").value),
+          not_interested_in: asList($("#org-never").value),
+          research_criteria: $("#org-criteria").value.trim(),
+        },
+      }),
+    });
+    // Say which behaviour just changed, not merely that a write happened.
+    $("#org-status").textContent = out.configured
+      ? t("org.saved") : t("org.savedEmpty");
+  } catch (err) {
+    showError($("#org-error"), err.message);
+  } finally {
+    restore();
+  }
+}
+
+/* Consequences of a permission, in the operator's terms. The gate enforces
+   scope names; a person deciding whether to grant one needs to know what it
+   lets happen. */
+const SCOPE_COPY = {
+  "mail:read":     { key: "scope.mail",     danger: false },
+  "research:read": { key: "scope.research", danger: false },
+  "calendar:read": { key: "scope.calendar", danger: false },
+  "memory:write":  { key: "scope.memory",   danger: false },
+  "brief:deliver": { key: "scope.deliver",  danger: true  },
+};
+
+function renderScopes() {
+  const box = $("#scope-list");
+  box.textContent = "";
+  const granted = new Set(STATE.settings.tool_scopes || []);
+  (STATE.settings.all_tool_scopes || []).forEach((scope) => {
+    const copy = SCOPE_COPY[scope] || { key: scope, danger: false };
+    const row = el("label", "check" + (copy.danger ? " danger" : ""));
+    const input = el("input");
+    input.type = "checkbox";
+    input.dataset.scope = scope;
+    input.checked = granted.has(scope);
+    input.onchange = () => {
+      $("#deliver-fields").hidden = !$('#scope-list input[data-scope="brief:deliver"]').checked;
+    };
+    row.appendChild(input);
+    const label = el("span");
+    label.appendChild(el("strong", null, t(copy.key)));
+    label.appendChild(el("span", "muted", " — " + t(copy.key + ".note")));
+    row.appendChild(label);
+    box.appendChild(row);
+  });
+  $("#deliver-fields").hidden = !granted.has("brief:deliver");
+  $("#allowed-recipients").value = (STATE.settings.allowed_recipients || []).join(", ");
+  $("#delivery-provider").value = STATE.settings.delivery_provider || "file";
+  $("#delivery-account").value = STATE.settings.delivery_account || "";
+  $("#delivery-account-field").hidden = $("#delivery-provider").value !== "gmail_send";
+}
+
+async function savePermissions(button) {
+  const restore = busy(button, "org.saving");
+  showError($("#perms-error"), "");
+  try {
+    const scopes = $$("#scope-list input[data-scope]")
+      .filter((i) => i.checked).map((i) => i.dataset.scope);
+    await post("/api/settings", {
+      tool_scopes: scopes,
+      allowed_recipients: $("#allowed-recipients").value,
+      delivery_provider: $("#delivery-provider").value,
+      delivery_account: $("#delivery-account").value.trim(),
+    });
+    $("#perms-status").textContent = scopes.includes("brief:deliver")
+      ? t("cfg.perms.savedSending") : t("cfg.perms.savedLocal");
+    await refresh();
+  } catch (err) {
+    showError($("#perms-error"), err.message);
+  } finally {
+    restore();
+  }
+}
+
+let PROMPTS = null;
+let PROMPT_TAB = "triage";
+
+async function renderPrompts() {
+  try {
+    PROMPTS = (await api("/api/prompts")).prompts;
+  } catch {
+    return;
+  }
+  const current = PROMPTS[PROMPT_TAB];
+  $("#prompt-text").value = current.text;
+  $("#prompt-source").textContent = current.customised
+    ? t("cfg.prompts.custom") : t("cfg.prompts.builtin");
+  $$("#prompt-tabs .tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.prompt === PROMPT_TAB));
+}
+
+async function savePrompt(button, { reset = false } = {}) {
+  const restore = busy(button, "org.saving");
+  showError($("#prompt-error"), "");
+  try {
+    const out = await api(`/api/prompts/${PROMPT_TAB}`, {
+      method: "POST",
+      body: JSON.stringify({ text: reset ? "" : $("#prompt-text").value }),
+    });
+    $("#prompt-status").textContent = out.redacted
+      ? t("cfg.prompts.redacted")
+      : out.customised ? t("cfg.prompts.saved") : t("cfg.prompts.restored");
+    await renderPrompts();
+  } catch (err) {
+    showError($("#prompt-error"), err.message);
+  } finally {
+    restore();
+  }
+}
+
+function renderSystemConfig() {
+  const s = STATE.settings;
+  const local = s.triage_backend === "ollama";
+  $("#backend-anthropic").checked = !local;
+  $("#backend-ollama").checked = local;
+  $("#ollama-fields").hidden = !local;
+  $("#ollama-model").value = s.ollama_model || "";
+  $("#ollama-host").value = s.ollama_host || "";
+  $("#ollama-status").textContent = s.ollama_reachable
+    ? t("cfg.ollama.found") : t("cfg.ollama.missing");
+  $("#ollama-status").className = "muted small " + (s.ollama_reachable ? "ok" : "warn-text");
+
+  $("#research-enabled").checked = s.research_enabled;
+  $("#research-effort").value = s.research_effort || "medium";
+  $("#research-searches").value = s.research_max_searches;
+  $("#research-companies").value = s.research_max_companies;
+  $("#research-ttl").value = s.research_ttl_days;
+  $("#calendar-enabled").checked = s.calendar_enabled;
+  $("#calendar-days").value = s.calendar_lookahead_days;
+  renderScopes();
+}
+
 function renderSettings() {
+  renderOrgProfile();
+  renderSystemConfig();
+  renderPrompts();
   renderMailboxList($("#settings-mailboxes"));
   $("#key-masked").textContent = STATE.anthropic.configured
     ? `${t("settings.keySet")} ${STATE.anthropic.masked}`
@@ -737,6 +909,45 @@ function wire() {
     renderGoogleSteps();
     render();
   };
+
+  $("#org-save").onclick = (e) => saveOrgProfile(e.currentTarget);
+  $("#perms-save").onclick = (e) => savePermissions(e.currentTarget);
+  $("#prompt-save").onclick = (e) => savePrompt(e.currentTarget);
+  $("#prompt-reset").onclick = (e) => savePrompt(e.currentTarget, { reset: true });
+  $("#delivery-provider").onchange = (e) => {
+    $("#delivery-account-field").hidden = e.target.value !== "gmail_send";
+  };
+  $$("#prompt-tabs .tab").forEach((tab) => {
+    tab.onclick = () => { PROMPT_TAB = tab.dataset.prompt; renderPrompts(); };
+  });
+  $$('input[name="backend"]').forEach((radio) => {
+    radio.onchange = async () => {
+      $("#ollama-fields").hidden = radio.value !== "ollama";
+      await post("/api/settings", { triage_backend: radio.value });
+      await refresh();
+    };
+  });
+  /* These save on change rather than behind a button: they are single settings
+     with immediate meaning, and a Save button for one number is a step that
+     exists only to be forgotten. */
+  const auto = {
+    "#ollama-model": (v) => ({ ollama_model: v }),
+    "#ollama-host": (v) => ({ ollama_host: v }),
+    "#research-enabled": (_, el) => ({ research_enabled: el.checked }),
+    "#research-effort": (v) => ({ research_effort: v }),
+    "#research-searches": (v) => ({ research_max_searches: Number(v) }),
+    "#research-companies": (v) => ({ research_max_companies: Number(v) }),
+    "#research-ttl": (v) => ({ research_ttl_days: Number(v) }),
+    "#calendar-enabled": (_, el) => ({ calendar_enabled: el.checked }),
+    "#calendar-days": (v) => ({ calendar_lookahead_days: Number(v) }),
+  };
+  Object.entries(auto).forEach(([sel, build]) => {
+    const node = $(sel);
+    if (node) node.onchange = async () => {
+      await post("/api/settings", build(node.value.trim(), node));
+      await refresh();
+    };
+  });
 
   $$(".topbar-actions [data-nav]").forEach((button) => {
     button.onclick = () => {
