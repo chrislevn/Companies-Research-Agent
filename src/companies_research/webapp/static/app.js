@@ -665,7 +665,14 @@ function renderScopes() {
   const box = $("#scope-list");
   box.textContent = "";
   const granted = new Set(STATE.settings.tool_scopes || []);
-  (STATE.settings.all_tool_scopes || []).forEach((scope) => {
+  /* Deliberate order, not the API's alphabetical one: the everyday read
+     permissions first, then the single one that can send something out. A list
+     that opens with the dangerous item reads as a warning about all of them. */
+  const known = Object.keys(SCOPE_COPY);
+  const all = STATE.settings.all_tool_scopes || [];
+  const ordered = [...known.filter((k) => all.includes(k)),
+                   ...all.filter((k) => !known.includes(k))];
+  ordered.forEach((scope) => {
     const copy = SCOPE_COPY[scope] || { key: scope, danger: false };
     const row = el("label", "check" + (copy.danger ? " danger" : ""));
     const input = el("input");
@@ -769,7 +776,25 @@ function renderSystemConfig() {
   renderScopes();
 }
 
+/* Settings is eleven cards. Shown at once it is a scroll nobody reads to the
+   end of; grouped, each screen answers one question. The group lives in the
+   URL after the view — #settings/permissions — so a specific screen can be
+   linked to and survives a reload. */
+let SETTINGS_GROUP = "connection";
+
+function showSettingsGroup(group) {
+  const groups = $$(".settings-group").map((g) => g.dataset.group);
+  SETTINGS_GROUP = groups.includes(group) ? group : groups[0];
+  $$(".settings-group").forEach((g) => {
+    g.hidden = g.dataset.group !== SETTINGS_GROUP;
+  });
+  $$("#settings-nav .tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.group === SETTINGS_GROUP);
+  });
+}
+
 function renderSettings() {
+  showSettingsGroup(SETTINGS_GROUP);
   renderOrgProfile();
   renderSystemConfig();
   renderPrompts();
@@ -923,6 +948,7 @@ function wire() {
   $$('input[name="backend"]').forEach((radio) => {
     radio.onchange = async () => {
       $("#ollama-fields").hidden = radio.value !== "ollama";
+      if (radio.value === STATE.settings.triage_backend) return;   // nothing chosen
       await post("/api/settings", { triage_backend: radio.value });
       await refresh();
     };
@@ -943,16 +969,47 @@ function wire() {
   };
   Object.entries(auto).forEach(([sel, build]) => {
     const node = $(sel);
-    if (node) node.onchange = async () => {
-      await post("/api/settings", build(node.value.trim(), node));
+    if (!node) return;
+    node.onchange = async () => {
+      const body = build(node.value.trim(), node);
+      const [key, value] = Object.entries(body)[0];
+      // Only write when the value actually differs from what is stored. A
+      // handler that fires on render rather than on intent is how a setting
+      // changes without anybody having chosen it.
+      if (STATE.settings[key] === value) return;
+      await post("/api/settings", body);
       await refresh();
+    };
+  });
+
+  /* The view lives in the URL so a screen can be linked to, reloaded without
+     losing your place, and reached directly — which also makes it reachable
+     from a script, so the layout can be checked in a real browser. */
+  const NAMED_VIEWS = ["settings", "review"];
+
+  function readHash() {
+    const [name, group] = (location.hash || "").replace(/^#/, "").split("/");
+    if (group) SETTINGS_GROUP = group;
+    return NAMED_VIEWS.includes(name) || SETUP_STEPS.includes(name) ? name : null;
+  }
+
+  window.addEventListener("hashchange", () => { VIEW = readHash(); render(); });
+  if (readHash()) VIEW = readHash();
+
+  $$("#settings-nav .tab").forEach((tab) => {
+    tab.onclick = () => {
+      showSettingsGroup(tab.dataset.group);
+      location.hash = `settings/${tab.dataset.group}`;
+      // Long groups otherwise open part-scrolled, at wherever the last one ended.
+      window.scrollTo({ top: 0, behavior: "instant" });
     };
   });
 
   $$(".topbar-actions [data-nav]").forEach((button) => {
     button.onclick = () => {
       const target = button.dataset.nav;
-      VIEW = (target === "settings" || target === "review") ? target : null;
+      VIEW = NAMED_VIEWS.includes(target) ? target : null;
+      location.hash = VIEW === "settings" ? `settings/${SETTINGS_GROUP}` : (VIEW || "");
       render();
     };
   });

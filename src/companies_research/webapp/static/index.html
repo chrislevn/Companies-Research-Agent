@@ -186,12 +186,21 @@
 <section id="view-settings" hidden>
   <h1 data-i18n="settings.title">Settings</h1>
 
+  <div class="tabs settings-nav" id="settings-nav">
+    <button class="tab active" data-group="connection" data-i18n="settings.group.connection">Connection</button>
+    <button class="tab" data-group="company" data-i18n="settings.group.company">Your company</button>
+    <button class="tab" data-group="behaviour" data-i18n="settings.group.behaviour">How it works</button>
+    <button class="tab" data-group="permissions" data-i18n="settings.group.permissions">Permissions</button>
+    <button class="tab" data-group="prompts" data-i18n="settings.group.prompts">Prompts</button>
+    <button class="tab" data-group="data" data-i18n="settings.group.data">Your data</button>
+  </div>
+
+  <div class="settings-group" data-group="connection">
   <article class="card">
     <h2 data-i18n="settings.mailboxes">Mailboxes</h2>
     <ul class="mailbox-list" id="settings-mailboxes"></ul>
     <button class="btn" id="add-mailbox" data-i18n="settings.addMailbox">Add another mailbox</button>
   </article>
-
   <article class="card">
     <h2 data-i18n="settings.key">Claude API key</h2>
     <p class="muted" id="key-masked"></p>
@@ -202,10 +211,8 @@
     <button class="btn" id="settings-key-save" data-i18n="key.save">Check and save</button>
     <p class="error" id="settings-key-error" hidden></p>
   </article>
-
-  <!-- Who the operator is. Without this the agent can only judge whether a
-       sender is a real business; with it, whether they are worth this
-       business's time. -->
+  </div>
+  <div class="settings-group" data-group="company" hidden>
   <article class="card" id="card-org">
     <h2 data-i18n="org.title">Your company</h2>
     <p class="muted" data-i18n="org.blurb">The agent compares every new sender against this to decide whether they are worth researching. Leave it blank and it falls back to judging whether the sender is a real business at all.</p>
@@ -272,7 +279,8 @@
     <span class="muted small" id="org-status"></span>
     <p class="error" id="org-error" hidden></p>
   </article>
-
+  </div>
+  <div class="settings-group" data-group="behaviour" hidden>
   <article class="card">
     <h2 data-i18n="settings.watch">Checking for new mail</h2>
     <label class="check">
@@ -290,9 +298,6 @@
     </label>
     <p class="muted small" data-i18n="settings.watch.note">Only mail that arrives from now on is ever looked at, so checking often costs nothing when nothing has come in.</p>
   </article>
-
-  <!-- Where triage runs. The choice is a privacy decision, so it says what it
-       means rather than naming two backends and leaving you to infer. -->
   <article class="card">
     <h2 data-i18n="cfg.triage">Reading your mail</h2>
     <label class="radio">
@@ -320,7 +325,6 @@
       <p class="muted small" id="ollama-status"></p>
     </div>
   </article>
-
   <article class="card">
     <h2 data-i18n="cfg.research">Researching companies</h2>
     <label class="check">
@@ -355,7 +359,6 @@
       </label>
     </div>
   </article>
-
   <article class="card">
     <h2 data-i18n="cfg.calendar">Checking your calendar</h2>
     <label class="check">
@@ -368,9 +371,34 @@
     </label>
     <p class="muted small" data-i18n="cfg.calendar.note">Uses the calendar permission you already granted at sign-in. Nothing new to approve.</p>
   </article>
-
-  <!-- The gate, in plain words. This is the security boundary, so it is stated
-       in terms of consequences rather than scope names. -->
+  <article class="card">
+    <h2 data-i18n="settings.behaviour">What counts as new</h2>
+    <label class="field">
+      <span data-i18n="settings.ignored">Domains to always ignore</span>
+      <input id="ignored" placeholder="mycompany.com, supplier.com">
+      <small class="muted" data-i18n="settings.ignored.note">Your own company and anyone you never want reported. Separate with commas.</small>
+    </label>
+    <label class="field narrow">
+      <span data-i18n="settings.window">Furthest back to catch up</span>
+      <select id="scan-days">
+        <option value="1" data-i18n="settings.window.1">Last 24 hours</option>
+        <option value="3" data-i18n="settings.window.3">Last 3 days</option>
+        <option value="7" data-i18n="settings.window.7">Last week</option>
+      </select>
+    </label>
+    <label class="field narrow">
+      <span data-i18n="settings.model">Claude model</span>
+      <select id="model">
+        <option value="claude-opus-5" data-i18n="settings.model.best">Most accurate (Opus)</option>
+        <option value="claude-sonnet-5" data-i18n="settings.model.balanced">Balanced (Sonnet)</option>
+        <option value="claude-haiku-4-5" data-i18n="settings.model.cheap">Cheapest (Haiku)</option>
+      </select>
+    </label>
+    <button class="btn" id="settings-save" data-i18n="settings.save">Save</button>
+    <p class="ok" id="settings-saved" hidden data-i18n="settings.saved">Saved.</p>
+  </article>
+  </div>
+  <div class="settings-group" data-group="permissions" hidden>
   <article class="card" id="card-permissions">
     <h2 data-i18n="cfg.perms">What the agent is allowed to do</h2>
     <p class="muted" data-i18n="cfg.perms.blurb">Every action passes a check against this list. An email that tries to talk the agent into doing something else fails here, because nothing an email says can grant a permission.</p>
@@ -399,8 +427,8 @@
     <span class="muted small" id="perms-status"></span>
     <p class="error" id="perms-error" hidden></p>
   </article>
-
-  <!-- Prompts, editable without touching a file. -->
+  </div>
+  <div class="settings-group" data-group="prompts" hidden>
   <article class="card" id="card-prompts">
     <h2 data-i18n="cfg.prompts">How the agent thinks</h2>
     <p class="muted" data-i18n="cfg.prompts.blurb">The instructions each step follows. Edit freely — clear a box to go back to the built-in version.</p>
@@ -417,39 +445,14 @@
     <span class="muted small" id="prompt-status"></span>
     <p class="error" id="prompt-error" hidden></p>
   </article>
-
-  <article class="card">
-    <h2 data-i18n="settings.behaviour">What counts as new</h2>
-    <label class="field">
-      <span data-i18n="settings.ignored">Domains to always ignore</span>
-      <input id="ignored" placeholder="mycompany.com, supplier.com">
-      <small class="muted" data-i18n="settings.ignored.note">Your own company and anyone you never want reported. Separate with commas.</small>
-    </label>
-    <label class="field narrow">
-      <span data-i18n="settings.window">Furthest back to catch up</span>
-      <select id="scan-days">
-        <option value="1" data-i18n="settings.window.1">Last 24 hours</option>
-        <option value="3" data-i18n="settings.window.3">Last 3 days</option>
-        <option value="7" data-i18n="settings.window.7">Last week</option>
-      </select>
-    </label>
-    <label class="field narrow">
-      <span data-i18n="settings.model">Claude model</span>
-      <select id="model">
-        <option value="claude-opus-5" data-i18n="settings.model.best">Most accurate (Opus)</option>
-        <option value="claude-sonnet-5" data-i18n="settings.model.balanced">Balanced (Sonnet)</option>
-        <option value="claude-haiku-4-5" data-i18n="settings.model.cheap">Cheapest (Haiku)</option>
-      </select>
-    </label>
-    <button class="btn" id="settings-save" data-i18n="settings.save">Save</button>
-    <p class="ok" id="settings-saved" hidden data-i18n="settings.saved">Saved.</p>
-  </article>
-
+  </div>
+  <div class="settings-group" data-group="data" hidden>
   <article class="card danger">
     <h2 data-i18n="settings.reset">Erase stored data</h2>
     <p class="muted" data-i18n="settings.reset.note">Deletes the local record of who you know and which emails were checked. Your mail is untouched. The next check will treat everyone as new until you re-run step 3.</p>
     <button class="btn danger" id="purge" data-i18n="settings.reset.button">Erase</button>
   </article>
+  </div>
 </section>
 
 </main>
