@@ -196,6 +196,10 @@
   </div>
 
   <div class="settings-group" data-group="connection">
+    <header class="group-head">
+      <h2 data-i18n="settings.h.connection">Connection</h2>
+      <p class="muted" data-i18n="settings.l.connection">Which mailbox the agent reads, and the key it uses to think.</p>
+    </header>
   <article class="card">
     <h2 data-i18n="settings.mailboxes">Mailboxes</h2>
     <ul class="mailbox-list" id="settings-mailboxes"></ul>
@@ -213,9 +217,11 @@
   </article>
   </div>
   <div class="settings-group" data-group="company" hidden>
+    <header class="group-head">
+      <h2 data-i18n="settings.h.company">Your company</h2>
+      <p class="muted" data-i18n="settings.l.company">Who you are, so the agent can judge whether a sender is worth your time rather than merely real.</p>
+    </header>
   <article class="card" id="card-org">
-    <h2 data-i18n="org.title">Your company</h2>
-    <p class="muted" data-i18n="org.blurb">The agent compares every new sender against this to decide whether they are worth researching. Leave it blank and it falls back to judging whether the sender is a real business at all.</p>
 
     <div class="two-col">
       <label class="field">
@@ -281,6 +287,10 @@
   </article>
   </div>
   <div class="settings-group" data-group="behaviour" hidden>
+    <header class="group-head">
+      <h2 data-i18n="settings.h.behaviour">How it works</h2>
+      <p class="muted" data-i18n="settings.l.behaviour">Where each step runs, how hard it looks, and how often. Every change here takes effect on the next check.</p>
+    </header>
   <article class="card">
     <h2 data-i18n="settings.watch">Checking for new mail</h2>
     <label class="check">
@@ -399,9 +409,11 @@
   </article>
   </div>
   <div class="settings-group" data-group="permissions" hidden>
+    <header class="group-head">
+      <h2 data-i18n="settings.h.permissions">Permissions</h2>
+      <p class="muted" data-i18n="settings.l.permissions">The boundary. Nothing an email says can grant a permission — only you can, here.</p>
+    </header>
   <article class="card" id="card-permissions">
-    <h2 data-i18n="cfg.perms">What the agent is allowed to do</h2>
-    <p class="muted" data-i18n="cfg.perms.blurb">Every action passes a check against this list. An email that tries to talk the agent into doing something else fails here, because nothing an email says can grant a permission.</p>
     <div id="scope-list"></div>
 
     <div id="deliver-fields" class="indent" hidden>
@@ -429,9 +441,11 @@
   </article>
   </div>
   <div class="settings-group" data-group="prompts" hidden>
+    <header class="group-head">
+      <h2 data-i18n="settings.h.prompts">Prompts</h2>
+      <p class="muted" data-i18n="settings.l.prompts">The instructions each step follows, in full. Edit them, or put them back.</p>
+    </header>
   <article class="card" id="card-prompts">
-    <h2 data-i18n="cfg.prompts">How the agent thinks</h2>
-    <p class="muted" data-i18n="cfg.prompts.blurb">The instructions each step follows. Edit freely — clear a box to go back to the built-in version.</p>
     <div class="tabs" id="prompt-tabs">
       <button class="tab active" data-prompt="triage" data-i18n="cfg.prompts.triage">Deciding who matters</button>
       <button class="tab" data-prompt="research" data-i18n="cfg.prompts.research">Researching a company</button>
@@ -447,8 +461,11 @@
   </article>
   </div>
   <div class="settings-group" data-group="data" hidden>
+    <header class="group-head">
+      <h2 data-i18n="settings.h.data">Your data</h2>
+      <p class="muted" data-i18n="settings.l.data">Everything stored on this computer, and how to remove it.</p>
+    </header>
   <article class="card danger">
-    <h2 data-i18n="settings.reset">Erase stored data</h2>
     <p class="muted" data-i18n="settings.reset.note">Deletes the local record of who you know and which emails were checked. Your mail is untouched. The next check will treat everyone as new until you re-run step 3.</p>
     <button class="btn danger" id="purge" data-i18n="settings.reset.button">Erase</button>
   </article>

@@ -429,3 +429,17 @@ label.check.danger {
 .settings-nav::-webkit-scrollbar { display: none; }
 .settings-nav .tab { white-space: nowrap; }
 .settings-group > .card:first-child { margin-top: 0; }
+
+/* Each section says what it is for. Six identical stacks of grey cards give no
+   sense of place; a title and one line of purpose do — and they carry the
+   heading for the four sections that hold a single card. */
+.group-head { margin: 0 0 1.1rem; }
+.group-head h2 {
+  margin: 0 0 .2rem; font-size: 1.45rem; letter-spacing: -.02em;
+}
+.group-head p { margin: 0; max-width: 54ch; }
+
+/* With the section header carrying the title, a lone card needs less chrome. */
+.settings-group[data-group="permissions"] > .card,
+.settings-group[data-group="prompts"] > .card,
+.settings-group[data-group="company"] > .card { padding-top: 1.2rem; }
