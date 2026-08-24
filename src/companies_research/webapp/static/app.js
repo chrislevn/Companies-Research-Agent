@@ -4,6 +4,7 @@
 const TOKEN = document.querySelector('meta[name="cr-token"]').content;
 
 let STATE = null;
+let AUTHED = false;   // set by the auth gate before any app data loads
 let PRESETS = [];
 let VIEW = null;
 let pollTimer = null;
@@ -91,6 +92,30 @@ function nextSetupStep() {
 /* VIEW is null for "wherever setup says I should be", or an explicit
    "settings" / "mailbox" once the user navigates deliberately. */
 function render() {
+  // The gate. Nothing else is reachable — not setup, not the dashboard —
+  // until a session exists. Checked here as well as at boot so a 401 landing
+  // mid-session (an expired cookie) drops straight back to the login form
+  // rather than a half-rendered page.
+  if (!AUTHED) {
+    $("#view-auth").hidden = false;
+    ["setup", "signin", "dashboard", "settings", "review"].forEach(
+      (v) => { const n = $("#view-" + v); if (n) n.hidden = true; });
+    $$(".topbar-actions [data-nav]").forEach((b) => { b.hidden = true; });
+    $("#theme-toggle").hidden = false;   // theme + language stay usable pre-login
+    return;
+  }
+  $("#view-auth").hidden = true;
+
+  // Authenticated, but the first /api/state has not returned yet — right after
+  // login, render() runs once before bootApp() populates STATE. Everything
+  // below reads STATE, so hold on a blank frame; bootApp's refresh calls
+  // render() again the moment the data lands.
+  if (!STATE) {
+    ["setup", "signin", "dashboard", "settings", "review"].forEach(
+      (v) => { const n = $("#view-" + v); if (n) n.hidden = true; });
+    return;
+  }
+
   const pending = nextSetupStep();
   let view;
   let step = pending;
@@ -102,16 +127,26 @@ function render() {
   } else if (SETUP_STEPS.includes(VIEW)) {
     view = "setup";
     step = VIEW;
+  } else if (!STATE.mailboxes?.length) {
+    // Nothing is connected yet, so there is no wizard worth showing — one
+    // decision ("which mailbox?") does not need three numbered steps.
+    view = "signin";
   } else {
     view = pending ? "setup" : "dashboard";
   }
 
+  $("#view-signin").hidden = view !== "signin";
   $("#view-setup").hidden = view !== "setup";
   $("#view-dashboard").hidden = view !== "dashboard";
   $("#view-settings").hidden = view !== "settings";
   $("#view-review").hidden = view !== "review";
   // During first-run setup there is nowhere else to go yet.
-  $$(".topbar-actions [data-nav]").forEach((b) => { b.hidden = !!pending && VIEW === null; });
+  $$(".topbar-actions [data-nav]").forEach((b) => {
+    // Sign out is available on every signed-in view, including the sign-in
+    // wizard: someone who logged into the wrong account needs the way back.
+    if (b.dataset.nav === "signout") { b.hidden = false; return; }
+    b.hidden = view === "signin" || (!!pending && VIEW === null);
+  });
 
   if (view === "setup") renderSetup(step);
   if (view === "dashboard") renderDashboard();
@@ -420,7 +455,17 @@ function researchBlock(lead) {
    flagged rather than smoothed over, and the recipient is confirmed in its own
    block — because the recipient is exactly what an injected instruction is
    trying to change. */
+/* Renders are serialised by generation, not by a lock.
+
+   The list is emptied before the fetch and filled after it, so two overlapping
+   calls — a tab click landing while the initial load is still in flight —
+   both clear and then both append, and the panel shows every brief twice. It
+   looks like a data bug and is not one. Each call takes a ticket; only the
+   newest may write. */
+let reviewGeneration = 0;
+
 async function renderReview() {
+  const generation = ++reviewGeneration;
   const list = $("#review-list");
   const banner = $("#delivery-banner");
   list.textContent = "";
@@ -430,10 +475,13 @@ async function renderReview() {
   try {
     payload = await api("/api/briefs");
   } catch (err) {
+    if (generation !== reviewGeneration) return;
     $("#review-error").textContent = err.message;
     $("#review-error").hidden = false;
     return;
   }
+  // A newer render started while this one was waiting; it owns the list now.
+  if (generation !== reviewGeneration) return;
 
   const d = payload.delivery || {};
   banner.className = "delivery-banner " + (d.leaves_machine ? "warn" : "safe");
@@ -509,6 +557,8 @@ function briefCard(brief, delivery) {
   split.appendChild(side);
   card.appendChild(split);
 
+  card.appendChild(pdfBlock(brief));
+
   if (brief.status !== "draft") {
     const done = el("p", "muted small");
     done.textContent = t("review.decided", {
@@ -517,11 +567,158 @@ function briefCard(brief, delivery) {
       when: formatDate(brief.approved_at),
     });
     card.appendChild(done);
+
+    /* A decision can be withdrawn; a delivery cannot. The button is simply
+       absent once the brief has been delivered, rather than present and
+       failing — an action you can click and cannot perform teaches people to
+       distrust the whole panel. */
+    if (brief.status !== "delivered") {
+      const undo = el("div", "approve-actions");
+      const button = el("button", "btn ghost", t("review.unapprove"));
+      const note = el("span", "muted small");
+      button.type = "button";
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await api(`/api/briefs/${brief.id}/unapprove`, {
+            method: "POST",
+            // No name field, exactly as the approve call has none: the
+            // server stamps "operator". One identity story, not two.
+            body: JSON.stringify({}),
+          });
+          note.textContent = t("review.unapproveDone");
+          await renderReview();
+        } catch (error) {
+          note.textContent = error.message;
+          button.disabled = false;
+        }
+      };
+      undo.appendChild(button);
+      undo.appendChild(note);
+      card.appendChild(undo);
+    }
     return card;
   }
 
   card.appendChild(approvalBlock(brief, delivery));
   return card;
+}
+
+/* The document, shown before it is approved.
+
+   Approving something you cannot see is not review, it is a rubber stamp — so
+   the PDF is the *same bytes* the delivery path sends, fetched from the same
+   endpoint, not a re-render that could drift from it.
+
+   It is fetched as a blob rather than pointed at with `<iframe src>`, because
+   a frame cannot send the run token as a header and the alternative is putting
+   the token in a URL, where it lands in history and in every log that records
+   paths. Loaded on demand: a page of briefs should not render a page of PDFs
+   nobody asked for. */
+function pdfBlock(brief) {
+  const box = el("div", "pdf-block");
+  const bar = el("div", "pdf-actions");
+  const toggle = el("button", "btn ghost", t("review.preview"));
+  const download = el("button", "btn ghost", t("review.download"));
+  const word = el("button", "btn ghost", t("review.downloadWord"));
+  toggle.type = download.type = word.type = "button";
+  bar.appendChild(toggle);
+  bar.appendChild(download);
+  bar.appendChild(word);
+  box.appendChild(bar);
+
+  const status = el("span", "muted small");
+  bar.appendChild(status);
+
+  const frame = el("iframe", "pdf-frame");
+  frame.hidden = true;
+  frame.title = brief.company || "brief";
+  box.appendChild(frame);
+
+  let objectUrl = null;
+  let pending = null;
+
+  async function bytes() {
+    if (objectUrl) return objectUrl;
+    if (pending) return pending;
+    pending = (async () => {
+      const response = await fetch(`/api/briefs/${brief.id}/pdf`, {
+        headers: { "X-CR-Token": TOKEN },
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || response.statusText);
+      }
+      objectUrl = URL.createObjectURL(await response.blob());
+      return objectUrl;
+    })();
+    try {
+      return await pending;
+    } finally {
+      pending = null;
+    }
+  }
+
+  toggle.onclick = async () => {
+    if (!frame.hidden) {
+      frame.hidden = true;
+      toggle.textContent = t("review.preview");
+      return;
+    }
+    status.textContent = t("review.previewLoading");
+    try {
+      frame.src = await bytes();
+      frame.hidden = false;
+      toggle.textContent = t("review.previewHide");
+      status.textContent = t("review.previewNote");
+    } catch (error) {
+      status.textContent = t("review.previewError", { error: error.message });
+    }
+  };
+
+  /* Word is fetched fresh each time rather than cached like the PDF: it is the
+     format people edit, so a stale copy is a copy of someone else's edits. */
+  word.onclick = async () => {
+    status.textContent = t("review.previewLoading");
+    try {
+      const response = await fetch(`/api/briefs/${brief.id}/docx`, {
+        headers: { "X-CR-Token": TOKEN },
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail || response.statusText);
+      }
+      const href = URL.createObjectURL(await response.blob());
+      const link = el("a");
+      link.href = href;
+      link.download = `${(brief.company || "brief").replace(/[^\w.-]+/g, "-")}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+      status.textContent = "";
+    } catch (error) {
+      status.textContent = t("review.previewError", { error: error.message });
+    }
+  };
+
+  download.onclick = async () => {
+    status.textContent = t("review.previewLoading");
+    try {
+      const href = await bytes();
+      const link = el("a");
+      link.href = href;
+      link.download = `${(brief.company || "brief").replace(/[^\w.-]+/g, "-")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      status.textContent = "";
+    } catch (error) {
+      status.textContent = t("review.previewError", { error: error.message });
+    }
+  };
+
+  return box;
 }
 
 /* The recipient gets its own confirmed block. It is the single field an
@@ -846,11 +1043,12 @@ async function runJob(path, body, titleKey, describe) {
     await finishJob({ status: "error", error: err.message });
     return;
   }
-  await poll(job.id, describe);
+  return poll(job.id, describe);
 }
 
-/* Resolves when the job leaves the running state, so callers can keep their
-   button disabled for the whole run. */
+/* Resolves with the finished job when it leaves the running state, so callers
+   can keep their button disabled for the whole run — and, where one step feeds
+   the next, read what the first one produced. */
 function poll(jobId, describe) {
   return new Promise((resolve) => {
     const tick = async () => {
@@ -859,7 +1057,7 @@ function poll(jobId, describe) {
         job = await api(`/api/jobs/${jobId}`);
       } catch (err) {
         await finishJob({ status: "error", error: err.message });
-        return resolve();
+        return resolve(null);
       }
       $("#job-phase").textContent = job.phase;
       setJobLog(job.lines);
@@ -883,7 +1081,9 @@ function poll(jobId, describe) {
         return;
       }
       await finishJob(job, describe);
-      resolve();
+      // The result, not just "it stopped": a failed job resolves to null so a
+      // caller chaining a second step does not run it on a failure.
+      resolve(job.status === "done" ? (job.result ?? {}) : null);
     };
     clearTimeout(pollTimer);
     pollTimer = setTimeout(tick, 600);
@@ -1008,6 +1208,7 @@ function wire() {
   $$(".topbar-actions [data-nav]").forEach((button) => {
     button.onclick = () => {
       const target = button.dataset.nav;
+      if (target === "signout") { signOut(); return; }
       VIEW = NAMED_VIEWS.includes(target) ? target : null;
       location.hash = VIEW === "settings" ? `settings/${SETTINGS_GROUP}` : (VIEW || "");
       render();
@@ -1098,6 +1299,84 @@ function wire() {
     runJob("/api/mailboxes/google/connect", {}, "job.connect",
       (result) => t("job.connected", { email: result.email }));
 
+  /* Sign in: connect the mailbox, then immediately look in it.
+
+     "Sign in with Google and it scans my Gmail" is one intention, so it is one
+     click. The scan is fired only after the connect job actually returns an
+     address — chaining it optimistically would start a scan against a mailbox
+     that failed to connect and report the OAuth failure as an empty inbox. */
+  const signinError = $("#signin-error");
+  const signinStatus = $("#signin-status");
+
+  $("#signin-google").onclick = async () => {
+    showError(signinError, "");
+    const button = $("#signin-google");
+    button.disabled = true;
+    try {
+      if (!STATE?.google_client_ready) {
+        // Google requires an OAuth client before any consent screen exists.
+        // Send them to the step that collects it rather than failing at the
+        // browser with a redirect_uri error nobody can act on.
+        signinStatus.textContent = t("signin.needSecret");
+        VIEW = "mailbox";
+        render();
+        return;
+      }
+      signinStatus.textContent = t("signin.opening");
+      const result = await runJob("/api/mailboxes/google/connect", {}, "job.connect",
+        (out) => t("job.connected", { email: out.email }));
+      if (result && result.email) {
+        signinStatus.textContent = t("signin.scanning", { email: result.email });
+        await runJob("/api/jobs/scan", {}, "job.scan", (out) =>
+          out.leads
+            ? t("job.scanDone", { leads: out.leads, fetched: out.fetched })
+            : t("job.scanNone", { days: STATE?.settings?.scan_days ?? 1 }));
+      }
+      VIEW = null;
+      await refresh();
+    } catch (error) {
+      showError(signinError, error.message);
+    } finally {
+      button.disabled = false;
+      signinStatus.textContent = "";
+    }
+  };
+
+  const secondCta = $("#signin-google-2");
+  if (secondCta) secondCta.onclick = () => $("#signin-google").click();
+
+  $("#signin-other").onclick = () => { VIEW = "mailbox"; render(); };
+
+  /* Theme: system → light → dark → system.
+
+     Stored rather than inferred, because "system" is a real third choice and
+     not the absence of one: with nothing stamped on the root, the page follows
+     the OS, which is what most people want and what the stylesheet's bare
+     :root block is written for. */
+  const THEMES = ["system", "light", "dark"];
+  const GLYPH = { system: "◐", light: "☀", dark: "☾" };
+
+  function applyTheme(name) {
+    if (name === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", name);
+    const button = $("#theme-toggle");
+    if (button) {
+      button.textContent = GLYPH[name];
+      button.title = `Theme: ${name}`;
+    }
+    try { localStorage.setItem("cra-theme", name); } catch { /* private mode */ }
+  }
+
+  let theme = "system";
+  try { theme = localStorage.getItem("cra-theme") || "system"; } catch { /* ignore */ }
+  if (!THEMES.includes(theme)) theme = "system";
+  applyTheme(theme);
+
+  $("#theme-toggle").onclick = () => {
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    applyTheme(theme);
+  };
+
   const saveKey = async (input, errorEl, button) => {
     showError(errorEl, "");
     const restore = busy(button, "key.checking");
@@ -1160,30 +1439,160 @@ function wire() {
   $("#job-close").onclick = closeOverlay;
 }
 
+let AUTH_MODE = "login";
+
+function setAuthMode(mode) {
+  AUTH_MODE = mode === "signup" ? "signup" : "login";
+  $$(".auth-tab").forEach((tab) =>
+    tab.classList.toggle("active", tab.dataset.auth === AUTH_MODE));
+  const signup = AUTH_MODE === "signup";
+  $("#auth-name-field").hidden = !signup;
+  $("#auth-submit").textContent = t(signup ? "auth.submit.signup" : "auth.submit.login");
+  // The password manager should offer a new password on signup and the saved
+  // one on login; the autocomplete token is how the browser is told which.
+  $("#auth-password").setAttribute("autocomplete",
+    signup ? "new-password" : "current-password");
+  showError($("#auth-error"), "");
+}
+
+function wireAuth() {
+  // Scoped to the container, per the rule test_ui enforces: a bare $$(".x")
+  // that assigns .onclick silently replaces any earlier handler on the page.
+  $$(".auth-tabs .auth-tab").forEach((tab) => {
+    tab.onclick = () => setAuthMode(tab.dataset.auth);
+  });
+
+  /* Continue with Google. Same success tail as the password form
+     (AUTHED=true; render(); bootApp()), reached a different way: kick off the
+     server-side OAuth job, poll the auth-scoped public endpoint until it
+     finishes, then trade the finished job for a session. The verified email is
+     resolved server-side from the job result — the client never names an
+     account. Wired by unique id, so it does not trip the unscoped-handler
+     guard in test_ui. */
+  const googleButton = $("#auth-google");
+  if (googleButton) googleButton.onclick = async () => {
+    showError($("#auth-error"), "");
+    googleButton.disabled = true;
+    try {
+      const job = await post("/api/auth/google/start", {});
+      // The start response hands us a one-time secret; poll and finish require
+      // it, so only this browser can watch or claim the sign-in it began.
+      const q = "job_id=" + encodeURIComponent(job.id) +
+                "&secret=" + encodeURIComponent(job.secret);
+      let state = job;
+      while (state.status === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        state = await api("/api/auth/google/poll?" + q);
+      }
+      if (state.status !== "done") {
+        throw new Error(state.error || t("auth.googleCancelled"));
+      }
+      await post("/api/auth/google/finish", { job_id: job.id, secret: job.secret });
+      AUTHED = true;
+      render();
+      await bootApp();
+    } catch (error) {
+      showError($("#auth-error"), error.message);
+    } finally {
+      googleButton.disabled = false;
+    }
+  };
+
+  $("#auth-form").onsubmit = async (event) => {
+    event.preventDefault();
+    const submit = $("#auth-submit");
+    const email = $("#auth-email").value.trim();
+    const password = $("#auth-password").value;
+    const name = $("#auth-name").value.trim();
+    showError($("#auth-error"), "");
+    submit.disabled = true;
+    try {
+      const path = AUTH_MODE === "signup" ? "/api/auth/signup" : "/api/auth/login";
+      const body = AUTH_MODE === "signup" ? { email, password, name } : { email, password };
+      await post(path, body);
+      // The session cookie is set by the response; from here the app boots
+      // exactly as it would on a fresh authenticated load.
+      AUTHED = true;
+      $("#auth-password").value = "";
+      render();
+      await bootApp();
+    } catch (error) {
+      showError($("#auth-error"), error.message);
+    } finally {
+      submit.disabled = false;
+    }
+  };
+}
+
+async function signOut() {
+  try { await post("/api/auth/logout", {}); } catch { /* already gone */ }
+  AUTHED = false;
+  STATE = null;
+  VIEW = null;
+  setAuthMode("login");
+  render();
+}
+
 // --- boot ------------------------------------------------------------------
+
+async function bootApp() {
+  // Everything here needs a session, so it only runs once the gate is open.
+  PRESETS = (await api("/api/presets")).presets;
+  renderPresets();
+  await refresh();
+  renderGoogleSteps();
+  startWatching();
+  await rejoinRunningJob();
+}
 
 (async function start() {
   document.documentElement.lang = LANG;
   applyTranslations();
   wire();
-  PRESETS = (await api("/api/presets")).presets;
-  renderPresets();
-  await refresh();
-  renderGoogleSteps();
+  wireAuth();
 
-  // A job started before a reload keeps running on the server; rejoin it —
-  // except a background check, which nobody asked for and should not be
-  // interrupted by a dialog appearing over the page.
-  if (STATE.job && STATE.job.status === "running" && STATE.job.kind !== "watch") {
-    openOverlay("job." + STATE.job.kind);
-    poll(STATE.job.id);
+  let status;
+  try {
+    status = await api("/api/auth/status");
+  } catch {
+    status = { authenticated: false, has_users: false };
   }
+  AUTHED = !!status.authenticated;
+  // Google sign-in only works on this machine with a client configured; the
+  // server tells us, and the button (and its "or" divider) stay hidden
+  // otherwise — e.g. on the public tunnel deploy, where loopback OAuth cannot
+  // complete.
+  const googleReady = !!status.google_login_available;
+  const gb = $("#auth-google"), gw = $("#auth-google-wrap");
+  if (gb) gb.hidden = !googleReady;
+  if (gw) gw.hidden = !googleReady;
+  // Open on "Create account" for a fresh install, "Log in" once someone has
+  // registered — the common case each time, without a toggle to hunt for.
+  setAuthMode(status.has_users ? "login" : "signup");
+  render();
+  if (AUTHED) await bootApp();
+})();
+
+// The interval boot that used to live at the end of start(); pulled into its
+// own function so it is armed only after sign-in, not on the login screen.
+function startWatching() {
+  if (startWatching._armed) return;
+  startWatching._armed = true;
 
   /* Mail now arrives without anyone pressing anything, so the page has to
      notice on its own. Only while the dashboard is on screen and nothing is
      mid-dialog. */
   setInterval(async () => {
-    if (!$("#overlay").hidden || $("#view-dashboard").hidden) return;
+    if (!AUTHED || !$("#overlay").hidden || $("#view-dashboard").hidden) return;
     try { await refresh(); } catch { /* transient — the next tick retries */ }
   }, 30000);
-})();
+}
+
+/* Rejoin a job that was running before a reload. Called from bootApp, after a
+   session is known to exist. */
+async function rejoinRunningJob() {
+  if (STATE?.job && STATE.job.status === "running" && STATE.job.kind !== "watch") {
+    openOverlay("job." + STATE.job.kind);
+    poll(STATE.job.id);
+  }
+}

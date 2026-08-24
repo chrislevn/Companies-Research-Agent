@@ -14,6 +14,7 @@ browser is unavailable, so the suite still runs anywhere.
 
 from __future__ import annotations
 
+import pathlib
 import socket
 import subprocess
 import time
@@ -77,6 +78,15 @@ def page(app):
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(app, wait_until="networkidle")
+        # The login wall is real, and the scratch database starts with no
+        # accounts — so create one through the actual form, exactly as a first
+        # visitor would, before any test tries to reach the app behind it.
+        page.wait_for_selector("#view-auth", state="visible")
+        page.click('.auth-tab[data-auth="signup"]')
+        page.fill("#auth-email", "ui-tests@example.com")
+        page.fill("#auth-password", "ui-tests-password")
+        page.click("#auth-submit")
+        page.wait_for_selector("#view-auth", state="hidden")
         page.errors = errors        # type: ignore[attr-defined]
         yield page
         browser.close()
@@ -163,3 +173,35 @@ def test_no_class_is_claimed_by_more_than_one_global_handler():
 
 def test_the_page_raises_no_errors(page):
     assert page.errors == [], page.errors
+
+
+def test_review_renders_are_serialised_by_generation():
+    """Two overlapping renders must not both write to the list.
+
+    The list is emptied before the fetch and filled after it, so without a
+    guard a tab click landing during the initial load leaves every brief on
+    screen twice — which reads as a data bug and is not one.
+    """
+    js = (pathlib.Path(__file__).resolve().parents[1]
+          / "src/companies_research/webapp/static/app.js").read_text()
+    body = js[js.index("async function renderReview()"):]
+    body = body[:body.index("\nfunction ") if "\nfunction " in body else len(body)]
+    assert "++reviewGeneration" in body, "renderReview takes no generation ticket"
+    assert body.count("if (generation !== reviewGeneration) return;") >= 2, (
+        "a stale render can still write to the list"
+    )
+
+
+def test_the_google_signin_button_is_on_the_auth_card():
+    """Wired by unique id (not a bare class), so it does not trip the
+    unscoped-handler guard, and reuses the existing signin.google string."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    html = (root / "src/companies_research/webapp/static/index.html").read_text()
+    auth_view = html[html.index('id="view-auth"'):html.index('id="view-signin"')]
+    assert 'id="auth-google"' in auth_view, "no Google button on the auth card"
+    assert 'data-i18n="signin.google"' in auth_view
+
+    js = (root / "src/companies_research/webapp/static/app.js").read_text()
+    # selected and wired by unique id, never by a shared class
+    assert '$("#auth-google")' in js, "the Google button is not selected by id"
+    assert "googleButton.onclick" in js, "the Google button has no handler"

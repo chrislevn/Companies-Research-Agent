@@ -39,6 +39,10 @@ class Job:
     # how it can be stopped. Jobs that never register one simply run to the end.
     cancel: Callable[[], None] | None = None
     cancelled: bool = False
+    # A per-job secret handed only to the caller that started it. Used by the
+    # pre-login Google flow so only the browser that began a sign-in can poll
+    # it or trade it for a session — never exposed in as_dict().
+    secret: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -94,6 +98,23 @@ class JobRunner:
     def get(self, job_id: str) -> Job | None:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def take(self, job_id: str, *, kind: str) -> Job | None:
+        """Pop a finished job of the given kind, atomically. Returns it once.
+
+        The single-use guarantee for session minting: a second call for the
+        same id gets None, so a finished sign-in cannot be replayed into more
+        than one session, and the identity it carries stops being readable the
+        moment it is spent.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.kind != kind or job.status != "done":
+                return None
+            self._jobs.pop(job_id, None)
+            if self._current == job_id:
+                self._current = None
+            return job
 
     @property
     def busy(self) -> bool:

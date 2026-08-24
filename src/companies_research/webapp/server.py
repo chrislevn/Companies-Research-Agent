@@ -5,6 +5,17 @@ page. Both matter: this server can read your mail and holds your API key, and
 any website you have open can otherwise POST to ``localhost``. A cross-origin
 page cannot read our HTML, so it cannot learn the token, so it cannot drive the
 API.
+
+Exposing it beyond 127.0.0.1 — through a tunnel or on a server — changes the
+threat model: the token is *in the page*, so the token alone no longer proves
+much. Two more gates cover that case (see DEPLOYMENT.md):
+
+- ``PUBLIC_HOSTS`` — hostnames the server agrees to answer as. Anything else
+  is refused before the page (and its token) is served, which is also what
+  stops a DNS-rebinding page from reading the token off ``localhost``. The
+  same list drives the cross-origin check, so a tunnel domain works at all.
+- The session gate below — accounts and logins from ``auth.py`` — is what
+  says *who* is asking once more than one person can reach the page.
 """
 
 from __future__ import annotations
@@ -17,9 +28,10 @@ import webbrowser
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+import ipaddress
+from urllib.parse import urlparse, urlsplit
 
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -58,14 +70,104 @@ app = FastAPI(
 # --- guards ----------------------------------------------------------------
 
 
+# Endpoints reachable without a session: the ones you use to *get* a session,
+# plus the health probe. Everything else under /api requires a logged-in user.
+PUBLIC_API = {
+    "/api/auth/status", "/api/auth/signup", "/api/auth/login", "/api/auth/logout",
+    # Google sign-in happens before a session exists, so these skip the session
+    # gate — but only the session gate. The Host(421), Origin(403) and
+    # x-cr-token(401) checks above still run, and each endpoint additionally
+    # refuses any non-loopback request. The poll uses a static path with a
+    # query param so it can be whitelisted here without opening the generic,
+    # session-gated /api/jobs/{id}.
+    "/api/auth/google/start", "/api/auth/google/poll", "/api/auth/google/finish",
+}
+
+
+def _request_is_local(request: Request) -> bool:
+    """Is this request physically on the same machine as the server?
+
+    Gates the Google sign-in flow, which runs ``InstalledAppFlow.run_local_server``
+    — a browser + loopback redirect on the *server*. Only a person at the machine
+    can complete it; a request over a tunnel must never launch it, or on a public
+    box a stranger drives the operator's own browser and Google session.
+
+    Deliberately does NOT trust the ``Host`` header — a client sets that freely,
+    so ``Host: 127.0.0.1`` from a remote attacker would otherwise pass. Two
+    signals a client cannot forge instead:
+
+    * ``public_hosts`` — the operator's own declaration that this is a public
+      deployment (set for the tunnel). If any is configured, this is not a local
+      run, full stop. This also closes the case where a same-host reverse proxy
+      makes the peer address below look like loopback.
+    * the socket peer address — TCP makes it unspoofable for a direct connection,
+      so a genuine remote attacker is rejected even on a bare ``0.0.0.0`` bind
+      with no ``public_hosts`` set.
+    """
+    if SETTINGS.public_hosts:
+        return False
+    client = request.client
+    if client is None:
+        return False
+    try:
+        return ipaddress.ip_address(client.host).is_loopback
+    except ValueError:
+        return False
+
+
+def _host_allowed(hostname: str | None) -> bool:
+    """Is this a name the server has agreed to answer as?
+
+    Localhost names always are. Public names must be listed in
+    ``PUBLIC_HOSTS``, either exactly (``demo.example.com``) or as a wildcard
+    suffix (``*.trycloudflare.com`` — a quick tunnel gets a random subdomain,
+    so the exact name cannot be known in advance).
+    """
+    if not hostname:
+        return False
+    name = hostname.lower()
+    if name in LOCAL_HOSTS:
+        return True
+    for allowed in SETTINGS.public_hosts:
+        if allowed.startswith("*.") and name.endswith(allowed[1:]):
+            return True
+        if name == allowed:
+            return True
+    return False
+
+
 @app.middleware("http")
 async def guard(request: Request, call_next):
-    if request.url.path.startswith("/api/"):
+    # Refuse to answer as a name we were never told about, before anything is
+    # served: the page carries the run token, so serving it to a hostname we
+    # do not recognise (a DNS-rebinding page, a stray proxy) hands the token
+    # over. On a plain local run PUBLIC_HOSTS is empty and this accepts
+    # exactly what the old loopback-only behaviour accepted.
+    try:
+        host_name = urlsplit(f"//{request.headers.get('host', '')}").hostname
+    except ValueError:  # a Host header urlsplit cannot parse is not one we serve
+        host_name = None
+    if not _host_allowed(host_name):
+        return JSONResponse({"error": "unrecognised host"}, status_code=421)
+
+    path = request.url.path
+    if path.startswith("/api/"):
         origin = request.headers.get("origin")
-        if origin and urlparse(origin).hostname not in LOCAL_HOSTS:
+        if origin and not _host_allowed(urlparse(origin).hostname):
             return JSONResponse({"error": "cross-origin request refused"}, status_code=403)
         if request.headers.get("x-cr-token") != TOKEN:
             return JSONResponse({"error": "stale page — please reload"}, status_code=401)
+        # The session gate. The per-run token proves the request came from our
+        # own page; the session proves *who* is asking. Both are required, and
+        # they answer different questions — a shared demo box has one token and
+        # many people.
+        if path not in PUBLIC_API:
+            from . import auth as _auth
+
+            user = _auth.user_for_session(request.cookies.get("cra_session", ""))
+            if user is None:
+                return JSONResponse({"error": "not signed in"}, status_code=401)
+            request.state.user = user
     return await call_next(request)
 
 
@@ -130,11 +232,191 @@ def _mask(value: str | None) -> str:
 
 
 
+# --- authentication --------------------------------------------------------
+
+_SESSION_COOKIE = "cra_session"
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    # httponly so page scripts cannot read it (a stolen token is a stolen
+    # login); samesite=strict so another site cannot ride the cookie; not
+    # `secure`, because this is served over plain http on loopback and a secure
+    # cookie would simply never be sent.
+    response.set_cookie(
+        _SESSION_COOKIE, token, max_age=30 * 24 * 3600,
+        httponly=True, samesite="strict", path="/",
+    )
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request) -> dict:
+    """Who, if anyone, is signed in — and whether any account exists yet.
+
+    ``has_users`` lets the page open on *Create account* for a fresh install
+    and on *Log in* afterwards, so the first-run and returning cases each get
+    the form they need without a toggle.
+    """
+    from . import auth
+
+    user = auth.user_for_session(request.cookies.get(_SESSION_COOKIE, ""))
+    return {
+        "authenticated": user is not None,
+        "has_users": auth.user_count() > 0,
+        "user": {"email": user.email, "name": user.name} if user else None,
+        # The page hides the Google button unless it could actually work here:
+        # the request is on this machine AND a Google OAuth client is set up.
+        "google_login_available": (
+            _request_is_local(request) and SETTINGS.google_credentials_file.exists()
+        ),
+    }
+
+
+@app.post("/api/auth/signup")
+def auth_signup(payload: dict = Body(...)) -> Response:
+    from . import auth
+
+    try:
+        user = auth.create_user(
+            email=str(payload.get("email", "")),
+            password=str(payload.get("password", "")),
+            name=str(payload.get("name", "")),
+        )
+    except auth.AuthError as exc:
+        raise HTTPException(400, str(exc)) from None
+    token = auth.open_session(user)
+    response = JSONResponse({"ok": True, "user": {"email": user.email, "name": user.name}})
+    _set_session_cookie(response, token)
+    return response
+
+
+@app.post("/api/auth/login")
+def auth_login(payload: dict = Body(...)) -> Response:
+    from . import auth
+
+    try:
+        user = auth.authenticate(
+            email=str(payload.get("email", "")),
+            password=str(payload.get("password", "")),
+        )
+    except auth.AuthError as exc:
+        raise HTTPException(401, str(exc)) from None
+    token = auth.open_session(user)
+    response = JSONResponse({"ok": True, "user": {"email": user.email, "name": user.name}})
+    _set_session_cookie(response, token)
+    return response
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request) -> Response:
+    from . import auth
+
+    auth.close_session(request.cookies.get(_SESSION_COOKIE, ""))
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(_SESSION_COOKIE, path="/")
+    return response
+
+
+# --- Google sign-in (local only) -------------------------------------------
+#
+# Same act as connecting the mailbox: a completed consent yields the owner's
+# verified address (via users.getProfile, under the gmail.readonly scope already
+# granted — no scope change), which is used as the login identity. Three steps
+# because the consent runs in a background job: start it, poll it, then trade a
+# finished job for a session cookie. The verified email is read from the
+# server-side job result, never from the request body, so nothing the client
+# sends can name a different account.
+
+
+@app.post("/api/auth/google/start")
+def google_login_start(request: Request) -> dict:
+    if not _request_is_local(request):
+        raise HTTPException(404)
+    if not SETTINGS.google_credentials_file.exists():
+        raise HTTPException(400, "Google sign-in is not set up on this machine.")
+
+    def work(progress) -> dict:
+        from ..google_auth import get_credentials
+
+        pending = mailboxes.pending_token_path()
+        pending.unlink(missing_ok=True)
+        progress("Opening Google in your browser — approve access there")
+        get_credentials(token_file=pending, consent_timeout=300,
+                        on_cancel=RUNNER.set_canceller)
+        progress("Checking the connection")
+        # Resolves the verified email AND connects the mailbox in one step —
+        # signing in with Google and connecting Gmail are the same act here.
+        profile = mailboxes.add_gmail_oauth_mailbox(pending)
+        return {"email": profile.email}
+
+    started = _start("auth-google", work)
+    # A secret only this caller learns. poll and finish require it, so a second
+    # party who guesses or sees the job id still cannot read the identity or
+    # mint the session.
+    secret = secrets.token_urlsafe(24)
+    job = RUNNER.get(started["id"])
+    if job is not None:
+        job.secret = secret
+    return {**started, "secret": secret}
+
+
+def _auth_job_or_404(request: Request, job_id: str, secret: str):
+    """Shared guard for poll/finish: local, right kind, right secret."""
+    if not _request_is_local(request):
+        raise HTTPException(404)
+    job = RUNNER.get(job_id)
+    if job is None or job.kind != "auth-google":
+        raise HTTPException(404, "No such sign-in")
+    if not (job.secret and secrets.compare_digest(secret, job.secret)):
+        raise HTTPException(404, "No such sign-in")
+    return job
+
+
+@app.get("/api/auth/google/poll")
+def google_login_poll(request: Request) -> dict:
+    job = _auth_job_or_404(request, request.query_params.get("job_id", ""),
+                           request.query_params.get("secret", ""))
+    return job.as_dict()
+
+
+@app.post("/api/auth/google/finish")
+def google_login_finish(request: Request, payload: dict = Body(...)) -> Response:
+    if not _request_is_local(request):
+        raise HTTPException(404)
+    from . import auth
+
+    # Validate secret + kind + locality first, then take the job atomically so
+    # it can be spent exactly once — a finished sign-in cannot be replayed into
+    # a second session, and its identity stops being readable once claimed.
+    guard = _auth_job_or_404(request, str(payload.get("job_id", "")),
+                             str(payload.get("secret", "")))
+    if guard.status != "done":
+        raise HTTPException(409, "That sign-in has not finished yet.")
+    job = RUNNER.take(str(payload.get("job_id", "")), kind="auth-google")
+    if job is None:
+        raise HTTPException(409, "That sign-in was already used.")
+    email = (job.result or {}).get("email")
+    if not email:
+        raise HTTPException(400, "That sign-in produced no identity.")
+    try:
+        user = auth.login_or_create_google(email=email)
+    except auth.AuthError as exc:
+        raise HTTPException(403, str(exc)) from None
+    token = auth.open_session(user)
+    response = JSONResponse({"ok": True, "user": {"email": user.email, "name": user.name}})
+    _set_session_cookie(response, token)
+    return response
+
+
 @app.get("/api/state")
 def state() -> dict:
     store = Store()
     accounts = mailboxes.configured_accounts()
     job = RUNNER.current()
+    # An auth-google job carries a verified email in its result and its id is
+    # the poll handle; /api/state must not surface either, or a signed-in party
+    # on a shared box could read another visitor's in-flight sign-in.
+    if job is not None and job.kind == "auth-google":
+        job = None
     known = store.sender_count()
 
     return {
@@ -260,6 +542,80 @@ def _delivery_state() -> dict:
     }
 
 
+@app.get("/api/briefs/{brief_id}/pdf")
+def brief_pdf(brief_id: str) -> Response:
+    """The brief as a PDF, for preview and download.
+
+    Served as bytes rather than a file path, and fetched by the page with the
+    same token header as every other call. An `<iframe src=...>` cannot send a
+    header, so the alternative would be putting the run token in a URL — where
+    it lands in history, in referrers and in any log that records paths. The
+    page fetches this as a blob instead and points the frame at the blob.
+    """
+    from ..briefs import PdfUnavailable, to_pdf
+    from ..models import Brief
+
+    record = Store().get_brief(brief_id)
+    if record is None:
+        raise HTTPException(404, "No such brief")
+    brief = Brief.model_validate_json(record["brief_json"])
+    try:
+        data = to_pdf(brief)
+    except PdfUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
+
+    stem = _slugify(brief.company or brief.domain or brief.lead_id)
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            # `inline` so the browser renders it in the frame instead of
+            # offering a download the sandbox would block anyway.
+            "Content-Disposition": f'inline; filename="{stem}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+def _slugify(text: str) -> str:
+    import re
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKD", text or "brief")
+    ascii_only = folded.encode("ascii", "ignore").decode() or "brief"
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", ascii_only)
+    # "Agora, Inc." ends in a full stop, which would meet the extension
+    # and produce "agora-inc..pdf".
+    return slug.strip("-.").lower() or "brief"
+
+
+@app.get("/api/briefs/{brief_id}/docx")
+def brief_docx(brief_id: str) -> Response:
+    """The brief as an editable Word document."""
+    from ..briefs import DocxUnavailable, to_docx
+    from ..models import Brief
+
+    record = Store().get_brief(brief_id)
+    if record is None:
+        raise HTTPException(404, "No such brief")
+    brief = Brief.model_validate_json(record["brief_json"])
+    try:
+        data = to_docx(brief)
+    except DocxUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
+
+    stem = _slugify(brief.company or brief.domain or brief.lead_id)
+    return Response(
+        content=data,
+        media_type=("application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"),
+        headers={
+            "Content-Disposition": f'attachment; filename="{stem}.docx"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.post("/api/briefs/{brief_id}/approve")
 def approve_brief(brief_id: str, payload: dict = Body(default={})) -> dict:
     """Record that a human approved this, then attempt delivery.
@@ -295,6 +651,33 @@ def approve_brief(brief_id: str, payload: dict = Body(default={})) -> dict:
         "error": outcome.error,
         "provider": outcome.provider,
     }
+
+
+@app.post("/api/briefs/{brief_id}/unapprove")
+def unapprove_brief(brief_id: str, payload: dict = Body(default={})) -> dict:
+    """Withdraw a decision, returning the brief to draft.
+
+    Refused once the brief has been delivered. At that point the withdrawal
+    would be a lie: the mail has gone, and a UI showing `draft` would say it
+    had not. The state machine refuses it too — this check exists to give the
+    person a reason rather than a silent failure.
+    """
+    who = str(payload.get("approved_by", "") or "operator").strip()
+    store = Store()
+    record = store.get_brief(brief_id)
+    if record is None:
+        raise HTTPException(404, "No such brief")
+    if record["status"] == "draft":
+        return {"ok": True, "status": "draft", "note": "already a draft"}
+    if record["status"] == "delivered":
+        raise HTTPException(
+            409,
+            "This brief has already been delivered. A delivery cannot be "
+            "withdrawn — the mail has left the machine.",
+        )
+    if not store.set_brief_status(brief_id, "draft", approved_by=who):
+        raise HTTPException(409, f"Cannot withdraw a brief that is {record['status']}")
+    return {"ok": True, "status": "draft"}
 
 
 @app.post("/api/briefs/{brief_id}/reject")
@@ -659,17 +1042,26 @@ def _free_port(preferred: int) -> int:
     return 0  # let the OS choose
 
 
-def serve(port: int = 8765, open_browser: bool = True) -> None:
+def serve(port: int = 8765, open_browser: bool = True, host: str = "127.0.0.1") -> None:
     import uvicorn
 
-    port = _free_port(port)
+    local = host in ("127.0.0.1", "localhost", "::1")
+    port = _free_port(port) if local else port
     url = f"http://127.0.0.1:{port}/"
 
     print("\n  Companies Research Agent", flush=True)
     print(f"  Open this in your browser:  {url}", flush=True)
+    if not local:
+        # A wider bind is for containers and tunnels, and it is only safe
+        # because of the guards above — say what still has to be true.
+        print(
+            f"  Listening on {host}:{port}. Remember: only hostnames in "
+            "PUBLIC_HOSTS will be answered — see DEPLOYMENT.md.",
+            flush=True,
+        )
     print("  Press Ctrl+C here to stop.\n", flush=True)
 
-    if open_browser:
+    if open_browser and local:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

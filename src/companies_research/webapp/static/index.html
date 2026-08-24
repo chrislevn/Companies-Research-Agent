@@ -19,11 +19,152 @@
     <button class="ghost" data-nav="dashboard" data-i18n="nav.home">Home</button>
     <button class="ghost" data-nav="review" data-i18n="nav.review">Review</button>
     <button class="ghost" data-nav="settings" data-i18n="nav.settings">Settings</button>
+    <button class="ghost" id="theme-toggle" type="button"
+            title="Light / dark / system" aria-label="Theme">◐</button>
+    <button class="ghost" id="signout" type="button" data-nav="signout" data-i18n="nav.signout">Sign out</button>
     <button class="ghost lang" id="lang-toggle">Tiếng Việt</button>
   </nav>
 </header>
 
 <main>
+
+<!-- ============================ AUTH GATE ============================ -->
+<section id="view-auth" hidden>
+  <div class="auth-split">
+    <div class="auth-pitch">
+      <p class="eyebrow" data-i18n="signin.eyebrow">Companies Research Agent</p>
+      <h1 data-i18n="auth.pitchTitle">Know who is writing to you, before you reply</h1>
+      <p class="auth-pitch-lede" data-i18n="auth.pitchLede">An agent that reads your mailbox, works out which messages are real business contacts, researches those companies against the live web, and puts a sourced brief in front of you to approve.</p>
+      <p class="auth-tagline" data-i18n="auth.tagline">Walk into every meeting with confidence — it researches the company behind each email for you.</p>
+      <ul class="signin-facts">
+        <li data-i18n="auth.fact1"><b>You approve everything.</b> Nothing leaves this machine until you have read it and pressed approve.</li>
+        <li data-i18n="auth.fact2"><b>Read-only mail.</b> The agent can read your inbox and nothing else — it cannot send, delete or change anything.</li>
+        <li data-i18n="auth.fact3"><b>Every claim is sourced.</b> Each fact in a brief shows the page it came from; anything unverified is marked.</li>
+      </ul>
+    </div>
+
+    <div class="auth-panel">
+      <div class="auth-card">
+        <div class="auth-tabs" role="tablist">
+          <button class="auth-tab active" data-auth="login" type="button" data-i18n="auth.tab.login">Log in</button>
+          <button class="auth-tab" data-auth="signup" type="button" data-i18n="auth.tab.signup">Create account</button>
+        </div>
+
+        <form id="auth-form" autocomplete="on">
+          <label class="field" id="auth-name-field" hidden>
+            <span data-i18n="auth.name">Your name</span>
+            <input id="auth-name" type="text" autocomplete="name" placeholder="Chris Le">
+          </label>
+          <label class="field">
+            <span data-i18n="auth.email">Email</span>
+            <input id="auth-email" type="email" autocomplete="email" required placeholder="you@company.com">
+          </label>
+          <label class="field">
+            <span data-i18n="auth.password">Password</span>
+            <input id="auth-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters">
+          </label>
+          <button class="btn primary block" id="auth-submit" type="submit" data-i18n="auth.submit.login">Log in</button>
+          <p class="error" id="auth-error" hidden></p>
+        </form>
+
+        <div class="auth-or" id="auth-google-wrap" hidden>
+          <span data-i18n="auth.or">or</span>
+        </div>
+        <button class="btn google block" id="auth-google" type="button" hidden>
+          <span class="g-mark" aria-hidden="true">G</span>
+          <span data-i18n="signin.google">Continue with Google</span>
+        </button>
+
+        <p class="auth-note muted small" data-i18n="auth.note">This account is stored only on this computer. It is how the app knows which mailbox and which briefs are yours — there is no server, and nothing is sent anywhere.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ SIGN IN ============================ -->
+<section id="view-signin" hidden>
+  <div class="signin">
+    <p class="eyebrow" data-i18n="signin.eyebrow">Companies Research Agent</p>
+    <h1 data-i18n="signin.title">Know who is writing to you</h1>
+    <p class="signin-lede" data-i18n="signin.lede">Connect your mailbox and the agent reads what arrives, works out which messages are real business contacts, researches those companies and puts a sourced brief in front of you.</p>
+
+    <div class="signin-actions">
+      <button class="btn google" id="signin-google" type="button">
+        <span class="g-mark" aria-hidden="true">G</span>
+        <span data-i18n="signin.google">Continue with Google</span>
+      </button>
+      <button class="btn ghost" id="signin-other" type="button" data-i18n="signin.other">Use another mail provider</button>
+    </div>
+    <p class="error" id="signin-error" hidden></p>
+    <p class="muted small" id="signin-status"></p>
+
+    <ul class="signin-facts">
+      <li data-i18n="signin.fact1"><b>Read-only.</b> The agent is granted permission to read mail and nothing else. It cannot send, delete or change anything in your mailbox.</li>
+      <li data-i18n="signin.fact2"><b>Your mail stays here.</b> Messages are processed on this computer and stored in a local file. Nothing is uploaded anywhere.</li>
+      <li data-i18n="signin.fact3"><b>You approve every brief.</b> Nothing leaves this machine until you have read it and pressed approve.</li>
+    </ul>
+  </div>
+
+  <!-- What happens after you connect. Numbered because it genuinely is a
+       sequence: each step consumes what the one before it produced. -->
+  <section class="landing-band">
+    <div class="landing-inner">
+      <p class="eyebrow" data-i18n="landing.flow.eyebrow">What happens next</p>
+      <h2 data-i18n="landing.flow.title">Five steps, and you decide the last one</h2>
+      <ol class="flow">
+        <li>
+          <span class="flow-n">1</span>
+          <h3 data-i18n="landing.flow.s1t">Read the inbox</h3>
+          <p data-i18n="landing.flow.s1b">New mail only. Anything already dealt with is skipped, so nothing is paid for twice.</p>
+        </li>
+        <li>
+          <span class="flow-n">2</span>
+          <h3 data-i18n="landing.flow.s2t">Sort out who matters</h3>
+          <p data-i18n="landing.flow.s2b">Receipts, newsletters and alerts are filtered out before any model runs. What is left gets classified.</p>
+        </li>
+        <li>
+          <span class="flow-n">3</span>
+          <h3 data-i18n="landing.flow.s3t">Research the company</h3>
+          <p data-i18n="landing.flow.s3b">Live web search. Every claim records the page it came from, and anything unsourced is marked as such.</p>
+        </li>
+        <li>
+          <span class="flow-n">4</span>
+          <h3 data-i18n="landing.flow.s4t">Check the calendar</h3>
+          <p data-i18n="landing.flow.s4b">If you are meeting them soon, the brief says when, and leads with what to raise.</p>
+        </li>
+        <li>
+          <span class="flow-n">5</span>
+          <h3 data-i18n="landing.flow.s5t">Wait for you</h3>
+          <p data-i18n="landing.flow.s5b">The brief sits in Review until you approve it. You can withdraw an approval at any time before it is sent.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="landing-band alt">
+    <div class="landing-inner">
+      <p class="eyebrow" data-i18n="landing.agents.eyebrow">Under the hood</p>
+      <h2 data-i18n="landing.agents.title">Seven agents, one gate</h2>
+      <p class="landing-lede" data-i18n="landing.agents.lede">Every capability runs through the same six checks — schema, authentication, scope, rate limit, audit, execute — and the audit row is written before the tool runs, so an attempt always leaves a trace.</p>
+      <div class="agent-grid">
+        <div class="agent"><b data-i18n="landing.a1t">Email</b><span data-i18n="landing.a1b">Reads the mailbox; sends only what you approved.</span></div>
+        <div class="agent"><b data-i18n="landing.a2t">Web research</b><span data-i18n="landing.a2b">Searches and reads company sources.</span></div>
+        <div class="agent"><b data-i18n="landing.a3t">Company info</b><span data-i18n="landing.a3b">Serves what is already known from the local store.</span></div>
+        <div class="agent"><b data-i18n="landing.a4t">Calendar</b><span data-i18n="landing.a4b">Finds the meeting the brief should prepare you for.</span></div>
+        <div class="agent"><b data-i18n="landing.a5t">Report</b><span data-i18n="landing.a5b">Renders Markdown, PDF and Word from one source.</span></div>
+        <div class="agent"><b data-i18n="landing.a6t">Memory</b><span data-i18n="landing.a6b">Keeps what was learned so it is not researched twice.</span></div>
+        <div class="agent"><b data-i18n="landing.a7t">Approval</b><span data-i18n="landing.a7b">Holds anything that would leave this machine.</span></div>
+      </div>
+      <div class="landing-cta">
+        <button class="btn google" id="signin-google-2" type="button">
+          <span class="g-mark" aria-hidden="true">G</span>
+          <span data-i18n="signin.google">Continue with Google</span>
+        </button>
+        <p class="signin-note muted small" data-i18n="signin.note">This app runs only on this computer, at 127.0.0.1. Signing in connects your mailbox — it is not a password wall, because there is nothing between this page and you.</p>
+      </div>
+    </div>
+  </section>
+</section>
 
 <!-- ============================ SETUP ============================ -->
 <section id="view-setup" hidden>

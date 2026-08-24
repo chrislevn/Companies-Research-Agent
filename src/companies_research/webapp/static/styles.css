@@ -1,44 +1,139 @@
+/* ---------------------------------------------------------------------------
+   Theme.
+
+   The neutrals are warm, not grey. This app reads correspondence and prints
+   documents people forward, so the register is stationery rather than console:
+   a paper-white ground, ink that is brown-black instead of pure black, and a
+   burnt-orange accent carried through from the PDF so the screen and the
+   printed brief are recognisably the same product.
+
+   Three theme states, not two. An explicit choice stamps `data-theme` on the
+   root; the default "system" setting stamps nothing and is resolved only by
+   `prefers-color-scheme`. Every colour is defined on bare `:root` first and
+   only *redefined* in the other two blocks, so nothing depends on a media
+   query having matched.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --bg: #f6f6f4;
+  color-scheme: light;
+
+  /* Ground and paper */
+  --bg: #f7f5f1;
+  --bg-tint: #f1eee8;
   --surface: #ffffff;
-  --ink: #1c1c1a;
-  --muted: #6b6b66;
-  --line: #e2e2dd;
-  --accent: #b4551f;
-  --accent-soft: #fdf1e8;
-  --ok: #1f7a4d;
-  --bad: #b3261e;
-  --surface-alt: #fbfbf9;
-  --warn: #8a5a05;
-  --warn-soft: #fdf6e7;
-  --ok-soft: #eaf5ef;
-  --bad-soft: #fdeceb;
-  --info: #3b4a8c;
-  --info-soft: #eef0fa;
+  --surface-alt: #faf8f5;
+  --surface-sunken: #f3f0ea;
+
+  /* Ink. Brown-black reads warmer against a paper ground than #000 does. */
+  --ink: #1b1815;
+  --ink-soft: #4a453f;
+  --muted: #77716a;
+  --line: #e4dfd6;
+  --line-strong: #d4cec2;
+
+  /* Identity */
+  --accent: #a94e1b;
+  --accent-hover: #8f411612;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbeee4;
+  --accent-line: #eccdb4;
+
+  /* Semantic — separate from the accent on purpose, so "good" never has to
+     compete with "this is our brand colour". */
+  --ok: #1c6f47;
+  --ok-soft: #e8f3ec;
+  --bad: #a72620;
+  --bad-soft: #fbe9e7;
+  --warn: #85570a;
+  --warn-soft: #fdf4e3;
+  --info: #33447f;
+  --info-soft: #eceff8;
+
+  /* Type */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.0625rem;
+  --step-2: 1.375rem;
+  --step-3: 1.875rem;
+  --step-4: 2.375rem;
+  --tracking-label: 0.075em;
+
+  /* Form */
   --radius: 12px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(0, 0, 0, .04);
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(40, 30, 20, .06);
+  --shadow: 0 1px 2px rgba(40, 30, 20, .05), 0 6px 20px rgba(40, 30, 20, .05);
+  --shadow-lg: 0 2px 4px rgba(40, 30, 20, .06), 0 18px 44px rgba(40, 30, 20, .10);
+  --ring: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent);
 }
 
+/* System dark. Guarded so an explicit light choice still wins on a dark OS. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16161a;
-    --surface: #1e1e23;
-    --ink: #ecece8;
-    --muted: #9a9a94;
-    --line: #2e2e35;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #15141a;
+    --bg-tint: #1a1820;
+    --surface: #1e1c24;
+    --surface-alt: #24222b;
+    --surface-sunken: #191820;
+    --ink: #eeeae4;
+    --ink-soft: #c4bdb4;
+    --muted: #948d85;
+    --line: #302d38;
+    --line-strong: #3d3947;
     --accent: #e08a4e;
-    --accent-soft: #2a2019;
-    --ok: #62c08d;
-    --bad: #f08a83;
-    --surface-alt: #24242a;
-    --warn: #d9a441;
+    --accent-hover: #eb9b62;
+    --accent-ink: #1b1815;
+    --accent-soft: #2c2119;
+    --accent-line: #4a3626;
+    --ok: #5fbd8a;
+    --ok-soft: #16281f;
+    --bad: #ef8b84;
+    --bad-soft: #2d1b1a;
+    --warn: #d7a344;
     --warn-soft: #2a2213;
-    --ok-soft: #14261f;
-    --bad-soft: #2e1c1b;
-    --info: #9aa5e0;
-    --info-soft: #1e2033;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    --info: #97a2dd;
+    --info-soft: #1d2032;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 20px rgba(0, 0, 0, .28);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, .4), 0 18px 44px rgba(0, 0, 0, .38);
+    --ring: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent);
   }
+}
+
+/* Explicit dark, so the toggle wins in both directions. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #15141a;
+  --bg-tint: #1a1820;
+  --surface: #1e1c24;
+  --surface-alt: #24222b;
+  --surface-sunken: #191820;
+  --ink: #eeeae4;
+  --ink-soft: #c4bdb4;
+  --muted: #948d85;
+  --line: #302d38;
+  --line-strong: #3d3947;
+  --accent: #e08a4e;
+  --accent-hover: #eb9b62;
+  --accent-ink: #1b1815;
+  --accent-soft: #2c2119;
+  --accent-line: #4a3626;
+  --ok: #5fbd8a;
+  --ok-soft: #16281f;
+  --bad: #ef8b84;
+  --bad-soft: #2d1b1a;
+  --warn: #d7a344;
+  --warn-soft: #2a2213;
+  --info: #97a2dd;
+  --info-soft: #1d2032;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 20px rgba(0, 0, 0, .28);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, .4), 0 18px 44px rgba(0, 0, 0, .38);
 }
 
 * { box-sizing: border-box; }
@@ -55,7 +150,11 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--step-0);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 h1 { font-size: 1.7rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
@@ -443,3 +542,542 @@ label.check.danger {
 .settings-group[data-group="permissions"] > .card,
 .settings-group[data-group="prompts"] > .card,
 .settings-group[data-group="company"] > .card { padding-top: 1.2rem; }
+
+
+/* --- brief PDF preview ---------------------------------------------------
+   The frame is tall enough to read a page without scrolling the card, and
+   sized in viewport units so it stays usable on a laptop screen. Colours come
+   from the same tokens as everything else, so it follows the theme instead of
+   sitting on a white rectangle in dark mode. */
+.pdf-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.pdf-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pdf-frame {
+  width: 100%;
+  height: min(72vh, 760px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+}
+
+.pdf-frame[hidden] { display: none; }
+
+/* ---------------------------------------------------------------------------
+   Refinements.
+
+   Appended deliberately, and every selector here is at least as specific as
+   the rule it is meant to beat. An earlier version of this file grew a second
+   copy of `.tabs` and `.tab` further down, which silently restyled the mailbox
+   tabs — so anything below that re-styles an existing component says which one
+   it is overriding and why.
+   --------------------------------------------------------------------------- */
+
+/* --- rhythm -------------------------------------------------------------- */
+
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  letter-spacing: -0.011em;
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--step-3); font-weight: 640; }
+h2 { font-size: var(--step-2); font-weight: 620; }
+h3 { font-size: var(--step-1); font-weight: 600; }
+
+/* Digits that line up. Every stat on the home view is a column of numbers, and
+   proportional figures make them wobble as the values change. */
+.stat b,
+.stat strong,
+.stat-value,
+.metric,
+td.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+
+/* Small uppercase labels read as labels only with air between the letters. */
+.eyebrow,
+.group-head h2 + p,
+.sources-title,
+.field-label {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-size: var(--step--1);
+  font-weight: 620;
+  color: var(--muted);
+}
+
+/* --- shell --------------------------------------------------------------- */
+
+header.topbar,
+.topbar {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+
+/* --- cards --------------------------------------------------------------- */
+
+.card,
+.lead,
+.brief-card {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.lead:hover,
+.brief-card:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--line-strong);
+}
+
+/* A lead is the one thing on the page that wants attention, so it gets the
+   accent as a rail rather than as another badge competing with the chips. */
+.lead {
+  position: relative;
+  overflow: hidden;
+}
+
+.lead::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+  opacity: .85;
+}
+
+.brief-card.status-approved::before,
+.brief-card.status-delivered::before { background: var(--ok); }
+.brief-card.status-rejected::before { background: var(--bad); }
+
+/* --- controls ------------------------------------------------------------ */
+
+.btn {
+  border-radius: var(--radius-sm);
+  font-weight: 560;
+  letter-spacing: -0.006em;
+  transition: background .15s ease, border-color .15s ease, color .15s ease,
+              box-shadow .15s ease;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-sunken); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Keyboard users get the same affordance mouse users do. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+input, select, textarea {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--step-0);
+}
+
+input:hover, select:hover, textarea:hover { border-color: var(--muted); }
+
+/* --- chips --------------------------------------------------------------- */
+
+.tag {
+  border-radius: var(--radius-pill);
+  font-size: 0.76rem;
+  font-weight: 560;
+  letter-spacing: 0.004em;
+  padding: .2rem .55rem;
+}
+
+/* --- motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- sign in -------------------------------------------------------------- */
+
+.signin {
+  max-width: 34rem;
+  margin: clamp(2rem, 9vh, 5rem) auto;
+  padding: 0 1.25rem;
+}
+
+.signin .eyebrow { margin: 0 0 .9rem; }
+
+.signin h1 {
+  font-size: var(--step-4);
+  font-weight: 660;
+  letter-spacing: -0.022em;
+  margin: 0 0 .85rem;
+}
+
+.signin-lede {
+  font-size: var(--step-1);
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0 0 1.9rem;
+  max-width: 32rem;
+}
+
+.signin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .7rem;
+  align-items: center;
+}
+
+/* Google's button, not a re-drawing of it: their brand guidelines ask for the
+   mark on a surface, so it sits on the card colour with a real border rather
+   than being tinted with our accent. */
+.btn.google {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .7rem 1.15rem;
+  font-size: var(--step-0);
+  font-weight: 580;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn.google:hover:not(:disabled) {
+  background: var(--surface-alt);
+  border-color: var(--muted);
+}
+
+.g-mark {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: .8rem;
+  color: #fff;
+  /* Google's four, in their order. */
+  background: conic-gradient(from 140deg, #ea4335, #fbbc05, #34a853, #4285f4, #ea4335);
+}
+
+.signin-facts {
+  list-style: none;
+  margin: 2.2rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: .8rem;
+}
+
+.signin-facts li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+  font-size: var(--step-0);
+  line-height: 1.5;
+}
+
+.signin-facts li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.signin-facts b { color: var(--ink); font-weight: 620; }
+
+.signin-note {
+  margin-top: 2rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+  line-height: 1.5;
+}
+
+#theme-toggle {
+  font-size: 1rem;
+  line-height: 1;
+  padding: .4rem .6rem;
+  min-width: 2.1rem;
+}
+
+/* --- landing -------------------------------------------------------------- */
+
+.landing-band {
+  border-top: 1px solid var(--line);
+  padding: clamp(2.5rem, 7vw, 4.5rem) 1.25rem;
+}
+
+.landing-band.alt { background: var(--bg-tint); }
+
+.landing-inner { max-width: 58rem; margin: 0 auto; }
+.landing-inner > .eyebrow { margin: 0 0 .7rem; }
+.landing-inner > h2 { margin: 0 0 1.4rem; font-size: var(--step-3); }
+
+.landing-lede {
+  color: var(--ink-soft);
+  max-width: 44rem;
+  margin: -0.6rem 0 1.8rem;
+  line-height: 1.6;
+}
+
+/* Numbered because this is a real sequence — each step consumes what the one
+   before it produced. Ornamental numbering on unordered content is the tell of
+   a template, so the markup is an <ol> and the numbers mean something. */
+.flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  counter-reset: none;
+}
+
+.flow li {
+  position: relative;
+  padding-top: 1.1rem;
+  border-top: 2px solid var(--accent-line);
+}
+
+.flow-n {
+  display: block;
+  font-size: var(--step--1);
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: .35rem;
+}
+
+.flow h3 { margin: 0 0 .35rem; font-size: var(--step-0); font-weight: 640; }
+.flow p { margin: 0; color: var(--muted); font-size: var(--step--1); line-height: 1.55; }
+
+.agent-grid {
+  display: grid;
+  gap: .75rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin-bottom: 2.2rem;
+}
+
+.agent {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  padding: .85rem .95rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.agent b { font-size: var(--step-0); font-weight: 620; }
+.agent span { font-size: var(--step--1); color: var(--muted); line-height: 1.45; }
+
+.landing-cta {
+  display: flex;
+  flex-direction: column;
+  gap: .9rem;
+  align-items: flex-start;
+}
+
+.landing-cta .signin-note { margin-top: 0; border-top: 0; padding-top: 0; max-width: 40rem; }
+
+/* The hero keeps its own margin; the bands below run full width. */
+#view-signin .signin { margin-bottom: clamp(2rem, 6vw, 3.5rem); }
+
+/* The landing page escapes the 780px reading column.
+
+   `main` is sized for reading one brief at a time, which is right for every
+   other view and wrong for this one: a first-run page has to establish what the
+   product is before it has anything to show, and a 780px column makes the
+   tinted band read as a floating box rather than a section of the page. The
+   negative margin is deliberately tied to main's own padding so the two cannot
+   drift apart. */
+#view-signin {
+  margin-inline: calc(50% - 50vw);
+  width: 100vw;
+  max-width: 100vw;
+  padding-top: 0;
+}
+
+/* One measure for the whole page, so the hero's left edge and the section
+   headings below it sit on the same line. */
+#view-signin .signin,
+#view-signin .landing-inner {
+  max-width: 62rem;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 5vw, 2.5rem);
+}
+
+#view-signin .signin {
+  margin-top: clamp(2.5rem, 10vh, 5.5rem);
+}
+
+/* The hero copy stays a readable measure inside the wider page. */
+#view-signin .signin h1 { max-width: 20ch; }
+#view-signin .signin-lede,
+#view-signin .signin-facts { max-width: 46ch; }
+#view-signin .landing-lede { max-width: 62ch; }
+
+/* --- auth gate ------------------------------------------------------------ */
+
+#view-auth {
+  margin-inline: calc(50% - 50vw);
+  width: 100vw;
+  max-width: 100vw;
+  min-height: calc(100vh - 61px);
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 5vw, 3rem) 1.25rem;
+}
+
+.auth-split {
+  width: 100%;
+  max-width: 64rem;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: clamp(2rem, 6vw, 4.5rem);
+  align-items: center;
+}
+
+.auth-pitch h1 {
+  font-size: var(--step-4);
+  font-weight: 660;
+  letter-spacing: -0.022em;
+  max-width: 16ch;
+  margin: .7rem 0 1rem;
+}
+
+.auth-pitch-lede {
+  color: var(--ink-soft);
+  font-size: var(--step-1);
+  line-height: 1.55;
+  max-width: 42ch;
+  margin: 0 0 1.8rem;
+}
+
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 1.6rem;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: .25rem;
+  padding: .25rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1.4rem;
+}
+
+.auth-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 560;
+  font-size: var(--step-0);
+  padding: .5rem;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.auth-tab.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+#auth-form { display: flex; flex-direction: column; gap: .9rem; }
+
+#auth-form .field { display: flex; flex-direction: column; gap: .3rem; }
+#auth-form .field span {
+  font-size: var(--step--1);
+  font-weight: 560;
+  color: var(--ink-soft);
+}
+#auth-form input { padding: .6rem .7rem; }
+
+.btn.block { width: 100%; justify-content: center; padding: .65rem; margin-top: .3rem; }
+
+.auth-note {
+  margin: 1.3rem 0 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .auth-split { grid-template-columns: 1fr; gap: 2rem; }
+  .auth-pitch { text-align: left; }
+}
+
+
+.auth-tagline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .5rem;
+  font-size: var(--step-0);
+  font-weight: 560;
+  color: var(--accent);
+  border-left: 3px solid var(--accent);
+  padding-left: .8rem;
+  margin: 0 0 1.8rem;
+  line-height: 1.5;
+  max-width: 42ch;
+}
+
+/* --- auth: 'or' divider before the Google button ------------------------- */
+.auth-or {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  gap: .75rem;
+  margin: 1.1rem 0 .9rem;
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+.auth-or::before, .auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+#auth-google.block { margin-top: 0; }
