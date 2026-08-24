@@ -38,6 +38,10 @@ def _isolate_state(monkeypatch, tmp_path):
     # real NeMo engine is a test that downloads models and talks to Ollama.
     # tests/test_guardrails.py opts back in with stubs.
     monkeypatch.setenv("GUARDRAILS_ENABLED", "false")
+    # The login wall is on by default in every test; the AUTH_DISABLED bypass is
+    # local-dev only, so a test that wants it opts back in explicitly. Without
+    # this, a developer's own .env=true would silently open every gated route.
+    monkeypatch.setenv("AUTH_DISABLED", "false")
 
     from companies_research import config as config_module
     from companies_research.config import reload_settings

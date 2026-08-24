@@ -1,7 +1,8 @@
 """Send test emails to the monitored inbox, so `scan` has something to triage.
 
-Reads GMAIL_APP_PASSWORD, OLLAMA_HOST and TESTMAIL_MODEL from the repo's .env —
-no secret lives in this file.
+Reads GMAIL_APP_PASSWORD, USER_EMAILS (or TESTMAIL_ACCOUNT), OLLAMA_HOST and
+TESTMAIL_MODEL from the repo's .env — no secret or real address lives in this
+file.
 
 Usage (from the repo root):
     .venv/bin/python scripts/send_test_email.py                # LLM-generated, brand-new every run
@@ -32,7 +33,12 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-ACCOUNT = "locvicvn1234@gmail.com"
+# The mailbox to send the test lead to (and from — it goes to self). Read from
+# .env, never hard-coded: the operator's real address must not live in the tree.
+# TESTMAIL_ACCOUNT wins; otherwise the first entry of USER_EMAILS, the address
+# the rest of the app already monitors.
+ACCOUNT = (os.environ.get("TESTMAIL_ACCOUNT")
+           or os.environ.get("USER_EMAILS", "").split(",")[0]).strip()
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 # A small fast model is plenty for writing a fake enquiry — this does NOT need
 # the heavy accuracy model the real pipeline uses. Override with TESTMAIL_MODEL.
@@ -165,6 +171,8 @@ def main() -> None:
     password = os.environ.get("GMAIL_APP_PASSWORD")
     if not password:
         sys.exit("GMAIL_APP_PASSWORD is not set in .env")
+    if not ACCOUNT:
+        sys.exit("no mailbox configured — set TESTMAIL_ACCOUNT or USER_EMAILS in .env")
 
     # Fixed samples ------------------------------------------------------
     if args.canned:

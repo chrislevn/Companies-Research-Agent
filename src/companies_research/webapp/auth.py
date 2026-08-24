@@ -330,6 +330,48 @@ def close_session(token: str) -> None:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
 
 
+def owner_user() -> User | None:
+    """The account that claimed the instance, or None if nobody has yet.
+
+    The first account to sign up is the operator; ordering by created_at then
+    rowid picks it deterministically even if two rows share a timestamp.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id, email, name FROM users ORDER BY created_at, rowid LIMIT 1"
+        ).fetchone()
+    if row is None:
+        return None
+    return User(id=row["id"], email=row["email"], name=row["name"])
+
+
+def ensure_local_owner() -> User:
+    """Owner account for the AUTH_DISABLED local bypass, created if absent.
+
+    The bypass logs in *as* an account, so a brand-new box (no signup yet) would
+    otherwise have nothing to log in as. Only ever reached from the guard's
+    local-and-flag-on branch, so this can only run on this machine. The password
+    is random and never used — the bypass does not check it — but a real one is
+    stored so the account behaves like any other if the flag is later removed.
+    """
+    owner = owner_user()
+    if owner is not None:
+        return owner
+    # create_user takes _signup_lock and re-checks first-user itself, so it is
+    # the single critical section — do NOT hold the lock across it here, the
+    # lock is non-reentrant and would self-deadlock. If a concurrent request
+    # claimed the box first, create_user raises and owner_user now returns it.
+    try:
+        return create_user(email="local-owner@localhost.local",
+                           password=secrets.token_urlsafe(24),
+                           name="Local owner")
+    except AuthError:
+        owner = owner_user()
+        if owner is None:
+            raise
+        return owner
+
+
 def is_owner(user: User) -> bool:
     """Is this the account that claimed the instance?
 
@@ -339,11 +381,8 @@ def is_owner(user: User) -> bool:
     with the operator's mailbox — those stay with the owner, so a demo visitor
     can look around without being able to reconfigure or erase.
     """
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT id FROM users ORDER BY created_at, rowid LIMIT 1"
-        ).fetchone()
-    return row is not None and row["id"] == user.id
+    owner = owner_user()
+    return owner is not None and owner.id == user.id
 
 
 def _now() -> float:

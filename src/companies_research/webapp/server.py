@@ -165,6 +165,14 @@ async def guard(request: Request, call_next):
             from . import auth as _auth
 
             user = _auth.user_for_session(request.cookies.get("cra_session", ""))
+            # Local dev bypass. Both conditions must hold: the operator opted in
+            # with AUTH_DISABLED, AND the request is genuinely on this machine.
+            # _request_is_local returns False the moment public_hosts is set, so
+            # a tunneled box can never take this branch — the login wall stays up
+            # for anyone off-machine even with the flag on. Falls back to the
+            # owner account so is_owner() and per-user state still resolve.
+            if user is None and SETTINGS.auth_disabled and _request_is_local(request):
+                user = _auth.ensure_local_owner()
             if user is None:
                 return JSONResponse({"error": "not signed in"}, status_code=401)
             request.state.user = user

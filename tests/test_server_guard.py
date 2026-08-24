@@ -23,12 +23,16 @@ def client_factory(monkeypatch):
     """Build a TestClient pretending to arrive at the given hostname."""
     from companies_research.webapp import server
 
-    def make(base_url: str = "http://127.0.0.1", public_hosts: str = "") -> TestClient:
+    def make(base_url: str = "http://127.0.0.1", public_hosts: str = "",
+             peer: str = "127.0.0.1") -> TestClient:
         monkeypatch.setenv("PUBLIC_HOSTS", public_hosts)
         from companies_research.config import reload_settings
 
         reload_settings()
-        return TestClient(server.app, base_url=base_url)
+        # TestClient defaults the socket peer to the string "testclient", which
+        # is not an IP and so never reads as loopback. Pin a real address so the
+        # guard's _request_is_local check exercises the branch a live server hits.
+        return TestClient(server.app, base_url=base_url, client=(peer, 50000))
 
     return make
 
@@ -133,3 +137,69 @@ def test_signup_then_state_through_tunnel(client_factory):
 
     # The session cookie from signup now opens the rest of the API.
     assert client.get("/api/state", headers=headers).status_code == 200
+
+
+# --- AUTH_DISABLED: a local-only dev bypass, never a tunnel one -------------
+
+
+def _make_owner() -> None:
+    """The first signup claims the box; the bypass logs in as that account."""
+    from companies_research.webapp import auth
+
+    auth.create_user(email="owner@example.com", password="long-enough-pw")
+
+
+def test_auth_disabled_opens_the_api_for_a_local_request(client_factory, monkeypatch):
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    client = client_factory()  # 127.0.0.1, no public_hosts
+    _make_owner()
+    # No session cookie at all, yet a local request is let straight through.
+    response = client.get("/api/state", headers={"x-cr-token": _token()})
+    assert response.status_code == 200
+
+
+def test_auth_disabled_bootstraps_an_owner_on_a_fresh_box(client_factory, monkeypatch):
+    """No signup yet: the local bypass creates the owner so a first-run box
+    opens without a form, and the account it made is the owner."""
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    client = client_factory()  # local, no owner exists
+    response = client.get("/api/state", headers={"x-cr-token": _token()})
+    assert response.status_code == 200
+    from companies_research.webapp import auth
+    assert auth.owner_user() is not None
+
+
+def test_auth_disabled_does_not_open_the_api_through_a_tunnel(client_factory, monkeypatch):
+    """The flag must never lift the wall on a deployed box. public_hosts set
+    makes _request_is_local False, so the session gate still applies."""
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    # Loopback peer on purpose: a same-host reverse proxy in front of the tunnel
+    # makes every request look local, so public_hosts — not the peer address —
+    # must be what shuts the bypass off.
+    client = client_factory(base_url=TUNNEL, public_hosts="*.trycloudflare.com",
+                            peer="127.0.0.1")
+    _make_owner()
+    response = client.get("/api/state",
+                          headers={"x-cr-token": _token(), "origin": TUNNEL})
+    assert response.status_code == 401
+
+
+def test_auth_disabled_over_tunnel_never_bootstraps_an_owner(client_factory, monkeypatch):
+    """The tunnel branch must not create a local owner as a side effect —
+    the guard never reaches ensure_local_owner when public_hosts is set."""
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    client = client_factory(base_url=TUNNEL, public_hosts="*.trycloudflare.com",
+                            peer="127.0.0.1")
+    assert client.get("/api/state",
+                      headers={"x-cr-token": _token(), "origin": TUNNEL}
+                      ).status_code == 401
+    from companies_research.webapp import auth
+    assert auth.owner_user() is None
+
+
+def test_default_local_run_still_requires_a_session(client_factory):
+    """With the flag off (the default), the wall holds even on localhost."""
+    client = client_factory()
+    _make_owner()
+    response = client.get("/api/state", headers={"x-cr-token": _token()})
+    assert response.status_code == 401

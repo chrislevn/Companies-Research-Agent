@@ -198,6 +198,11 @@ class Settings:
     # First signup claims the instance; further signups are refused unless this
     # is turned on. Enforced in webapp.auth.create_user, not in the endpoint.
     signup_open: bool = False
+    # Local dev escape hatch: skip the session gate for loopback requests only.
+    # It NEVER applies once public_hosts is set (a tunnel), so it cannot open a
+    # deployed box — see the guard in webapp.server. Off by default; opt in with
+    # AUTH_DISABLED=true for a password-free local run.
+    auth_disabled: bool = False
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
     allowed_recipients: list[str] = field(default_factory=list)
@@ -317,6 +322,7 @@ def load_settings() -> Settings:
         org_profile_file=_path("ORG_PROFILE_FILE", "profile.json"),
         public_hosts=_csv("PUBLIC_HOSTS"),
         signup_open=_bool("SIGNUP_OPEN", False),
+        auth_disabled=_bool("AUTH_DISABLED", False),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
         allowed_recipients=_csv("ALLOWED_RECIPIENTS"),
