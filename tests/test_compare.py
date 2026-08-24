@@ -144,9 +144,17 @@ def test_both_query_shapes_are_asked():
 
 
 def test_the_openai_key_is_never_written_into_a_tracked_file():
-    """It belongs in .env, which is gitignored — not in an example or a report."""
+    """It belongs in .env, which is gitignored — not in an example or a report.
+
+    Matches the shape of a real key (prefix plus a long key body), not the
+    bare prefix: the red-team harness legitimately contains the prefix inside
+    the regex that *detects* leaked keys, and this scan must not flag its own
+    detector. A real key always has the body, so nothing is lost.
+    """
+    import re
     import subprocess
 
+    key_shape = re.compile(r"sk-proj-[A-Za-z0-9_\-]{20,}")
     tracked = subprocess.run(["git", "ls-files"], cwd=ROOT,
                              capture_output=True, text=True).stdout.split()
     for name in tracked:
@@ -157,4 +165,4 @@ def test_the_openai_key_is_never_written_into_a_tracked_file():
             body = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
-        assert "sk-proj-" not in body, f"an OpenAI key is committed in {name}"
+        assert not key_shape.search(body), f"an OpenAI key is committed in {name}"
