@@ -440,7 +440,10 @@ def _skip_reason(
     if not sender:
         return "no sender address"
     if sender == account.email or sender in SETTINGS.user_emails:
-        return "sent by you"
+        # --include-known lifts this gate too: the testmail demo sends its
+        # lead from your own address, and it should still reach triage.
+        if not include_known_senders:
+            return "sent by you"
     if _is_ignored_domain(message, account):
         return "ignored/own domain"
     if message.is_automated:

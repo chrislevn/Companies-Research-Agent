@@ -918,7 +918,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="only mail that arrived since the last scan; --since caps how far "
                              "back a catch-up reaches (recommended for scheduled runs)")
     p_scan.add_argument("--include-known", action="store_true",
-                        help="also triage senders you've corresponded with before")
+                        help="also triage senders you've corresponded with before, "
+                             "and mail sent from your own address (testmail)")
     p_scan.add_argument("--reprocess", action="store_true",
                         help="re-triage messages already processed")
     p_scan.add_argument("--no-research", action="store_true",

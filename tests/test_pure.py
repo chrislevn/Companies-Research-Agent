@@ -71,6 +71,17 @@ def test_your_own_mail_is_skipped():
     assert _skip(_msg(sender=EmailAddress(email="owner@example.com"))) == "sent by you"
 
 
+def test_include_known_also_lets_your_own_mail_through():
+    """testmail sends the demo lead from your own address; --include-known
+    is the switch that lets it reach triage."""
+    gmail_account = Account(account_id="a", provider="gmail", email="me@gmail.com")
+    reason = _skip_reason(
+        _msg(sender=EmailAddress(email="me@gmail.com")), gmail_account, _Store(),
+        include_known_senders=True, reprocess=False,
+    )
+    assert reason is None
+
+
 def test_automated_mail_is_skipped():
     """The rule that removes almost all real inbox volume."""
     assert _skip(_msg(is_automated=True)) == "automated or bulk mail"

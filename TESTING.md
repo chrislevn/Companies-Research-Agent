@@ -30,25 +30,33 @@ Put `-v` after `./start.sh` on any command to watch the logs live
 - `testmail` — local LLM writes a brand-new enquiry and sends it to your inbox
   (subject + body print so you see what was sent)
 - `./start.sh -v scan --since 1h --include-known` — watch the log:
-  fetched → triaged → lead recorded
+  fetched → triaged → lead recorded. `--include-known` is the testing switch:
+  it also lets through mail sent from your **own** address, which is exactly
+  what testmail is
 - If a rerun says already processed, add `--reprocess`
-- `./start.sh -v scan` (plain) is the realistic path — use it when the mail
-  comes from a *different* address, so it is a brand-new sender
+- `./start.sh -v scan` (plain) is the realistic path — it skips your own mail
+  ("sent by you") and known senders; use it when the mail comes from a
+  *different* address, so it is a brand-new sender
 
 ## 2. Web Research Agent + Company Info (DB cache)
 
+- See what the cache already holds first:
+  `sqlite3 data/agent.db "SELECT domain, ok, researched_at FROM company_research"`
+  — `ok=1` is a cached profile, `ok=0` a cached **failure**
 - Start with an **unprocessed** company, so the Web Research Agent actually
   runs instead of the cache answering: `./start.sh -v research <domain>` with
-  a domain not in the DB yet (e.g. `agora.io`) — watch the live pass: profile
-  + news + sources (needs credit)
+  a domain not in that table — watch the live pass: profile + news + sources
+  (needs credit)
 - `./start.sh -v research` with no domain catches up on every scanned lead
   that has not been researched yet (step 1's testmail company lands here if
   its research failed during the scan)
 - Run the **same** command again → the log shows it served from the SQLite
-  cache (this is the "Company Info Agent — lấy info từ DB" box)
-- `./start.sh -v research fpt.com` — already cached, so it returns instantly
-  with zero API calls even without credit; good as a cache-only fallback,
-  not as the web-research demo
+  cache (this is the "Company Info Agent — lấy info từ DB" box).
+  `agora.io` is the standing cached example: lead + profile already in the DB
+- Failures are cached too, for 6 hours — "research recently failed —
+  <domain>, not retrying yet" means the last attempt errored (fpt.com sits in
+  this state after a no-credit run). `--force` retries immediately, but
+  without credit it just fails again
 - Force a refresh inside the 30-day window (needs credit):
   `./start.sh -v research <domain> --force`
 
@@ -59,7 +67,7 @@ Put `-v` after `./start.sh` on any command to watch the logs live
   `./start.sh chat -m "list the leads"`, or read them off the `ui` dashboard
 - `./start.sh -v calendar <domain>` — upcoming meetings, matched on attendee
   email domain; add `--name "Company Name"` for the weaker title match
-- Cached standby: `./start.sh -v calendar fpt.com --name "FPT Software"`
+- Standing example: `./start.sh -v calendar agora.io --name "Agora"`
 
 ## 4. Report Generation Agent
 
@@ -67,7 +75,8 @@ Put `-v` after `./start.sh` on any command to watch the logs live
   from what the store already holds (triage + research + calendar) and saves
   it as a draft in the review queue
 - The lookup is by the lead's domain, not its display name —
-  `brief "FPT Software"` finds no lead; `brief fpt.com` is the cached standby
+  `brief "Agora"` finds no lead; `brief agora.io` is the standing cached
+  example (note the FPT lead's domain is `fptsoftware.com`, not `fpt.com`)
 
 ## 5. Human Approval Agent
 
@@ -139,8 +148,8 @@ Put `-v` after `./start.sh` on any command to watch the logs live
   http://127.0.0.1:8766/mcp; every tool call prints here so you see it live
 - Register: `claude mcp add --transport http companies-research http://127.0.0.1:8766/mcp`
 - In a Claude session: `/mcp` to confirm, then ask in plain language —
-  "call get_status", "scan my inbox", "list the leads", "research fpt.com",
-  "generate a brief for FPT Software", "show the audit log"
+  "call get_status", "scan my inbox", "list the leads", "research agora.io",
+  "generate a brief for Agora", "show the audit log"
 - Prove gates hold over MCP: ask "deliver the brief" → refused at
   scopes/allow-list
 - Cross-check: back in your terminal, `./start.sh tools --limit 30` — the MCP
@@ -154,8 +163,8 @@ research → brief <domain> → ui (approve) → tools --limit 30 → redteam �
 eval → Grafana stack → MCP
 ```
 
-The scanned lead's domain carries through every step; fall back to `fpt.com`
-only when there is no credit for live research.
+The scanned lead's domain carries through every step; fall back to `agora.io`
+(the standing cached company) when there is no credit for live research.
 
 ## The testmail command
 
