@@ -1,0 +1,30 @@
+{
+  "companies": 1,
+  "succeeded": 0,
+  "criteria": {
+    "completeness": 0.0,
+    "sourced_share": 0.0,
+    "domain_match_rate": 0.0,
+    "seconds_mean": 0.0,
+    "sources_mean": 0.0,
+    "news_age_days_median": null,
+    "fresh_within_30d_rate": 0.0,
+    "ready_rate": 0.0
+  },
+  "per_company": [
+    {
+      "id": "fpt",
+      "company": "FPT Software",
+      "completeness": 0.0,
+      "present": {},
+      "sourced_share": 0.0,
+      "domain_matches": false,
+      "sources": 0,
+      "news_age_days": null,
+      "seconds": 195.1,
+      "confidence": 0.0,
+      "ready": false,
+      "error": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011CeL7aMQvQVB17nZsrs32o'}"
+    }
+  ]
+}

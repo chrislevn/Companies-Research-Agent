@@ -1,0 +1,75 @@
+{
+  "fixtures": 30,
+  "queries": 42,
+  "models": {
+    "openai-3-small": {
+      "model": "text-embedding-3-small",
+      "provider": "openai",
+      "dimensions": 1536,
+      "recall_at_1": 0.8333,
+      "recall_at_3": 1.0,
+      "mrr": 0.9167,
+      "embed_seconds": 1.18,
+      "query_latency_p50": 0.224,
+      "tokens": 2187,
+      "cost_per_1000_docs": 0.0015,
+      "misses": [
+        "'What did CloudWorks contact us about?' → lead-04 (wanted hard-06-mixed-language, rank 2)",
+        "'Lumen Analytics' → lead-04 (wanted inj-01-ignore-previous, rank 2)",
+        "'What did Lumen Analytics contact us abou' → lead-04 (wanted inj-01-ignore-previous, rank 2)",
+        "'Saigon Pack' → lead-10 (wanted inj-03-signature-vietnamese, rank 2)",
+        "'What did Saigon Pack contact us about?' → lead-10 (wanted inj-03-signature-vietnamese, rank 2)",
+        "'Quayside Freight' → inj-02-exfiltrate (wanted lead-08, rank 2)",
+        "'What did Quayside Freight contact us abo' → inj-02-exfiltrate (wanted lead-08, rank 2)"
+      ],
+      "error": ""
+    },
+    "openai-3-large": {
+      "model": "text-embedding-3-large",
+      "provider": "openai",
+      "dimensions": 3072,
+      "recall_at_1": 0.8095,
+      "recall_at_3": 1.0,
+      "mrr": 0.9008,
+      "embed_seconds": 0.84,
+      "query_latency_p50": 0.273,
+      "tokens": 2187,
+      "cost_per_1000_docs": 0.0095,
+      "misses": [
+        "'CloudWorks' → hard-03-competitor-lookalike (wanted hard-06-mixed-language, rank 2)",
+        "'What did CloudWorks contact us about?' → hard-02-ambiguous-name (wanted hard-06-mixed-language, rank 3)",
+        "'What did Lumen Analytics contact us abou' → lead-04 (wanted inj-01-ignore-previous, rank 2)",
+        "'Lumen Analytics' → inj-01-ignore-previous (wanted lead-04, rank 2)",
+        "'Quayside Freight' → inj-02-exfiltrate (wanted lead-08, rank 2)",
+        "'What did Quayside Freight contact us abo' → inj-02-exfiltrate (wanted lead-08, rank 2)",
+        "'Saigon Pack' → inj-03-signature-vietnamese (wanted lead-10, rank 2)",
+        "'What did Saigon Pack contact us about?' → inj-03-signature-vietnamese (wanted lead-10, rank 2)"
+      ],
+      "error": ""
+    },
+    "nomic (local)": {
+      "model": "nomic-embed-text",
+      "provider": "ollama",
+      "dimensions": 768,
+      "recall_at_1": 0.7857,
+      "recall_at_3": 1.0,
+      "mrr": 0.8849,
+      "embed_seconds": 0.33,
+      "query_latency_p50": 0.031,
+      "tokens": 2187,
+      "cost_per_1000_docs": 0.0,
+      "misses": [
+        "'What did Điện Thủ Đức contact us about?' → neg-02-bank (wanted hard-05-diacritics, rank 3)",
+        "'Lumen Analytics' → lead-04 (wanted inj-01-ignore-previous, rank 2)",
+        "'What did Lumen Analytics contact us abou' → lead-04 (wanted inj-01-ignore-previous, rank 2)",
+        "'Quayside Freight' → lead-08 (wanted inj-02-exfiltrate, rank 2)",
+        "'What did Vinatextile contact us about?' → hard-08-freemail-real-business (wanted lead-02, rank 2)",
+        "'What did Quayside Freight contact us abo' → inj-02-exfiltrate (wanted lead-08, rank 2)",
+        "'What did TerraVerde contact us about?' → hard-04-dead-site (wanted lead-09, rank 3)",
+        "'Saigon Pack' → inj-03-signature-vietnamese (wanted lead-10, rank 2)",
+        "'What did Saigon Pack contact us about?' → inj-03-signature-vietnamese (wanted lead-10, rank 2)"
+      ],
+      "error": ""
+    }
+  }
+}

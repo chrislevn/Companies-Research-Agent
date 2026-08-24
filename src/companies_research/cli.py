@@ -209,6 +209,87 @@ def cmd_calendar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report_quality(args: argparse.Namespace) -> int:
+    """Score finished briefs for real companies against the six criteria."""
+    import sys as _sys
+
+    root = ROOT_DIR / "tests"
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    from eval.report_quality import run as run_quality
+
+    report = run_quality(only=args.only)
+    return 0 if report else 1
+
+
+def cmd_redteam(args: argparse.Namespace) -> int:
+    """Attack the agent with prompt-injection payloads and report what held."""
+    import sys as _sys
+
+    root = ROOT_DIR / "tests"
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    from eval.redteam import run as run_redteam
+
+    report = run_redteam(only_family=args.family)
+    if not report:
+        return 1
+    # A breach is a failing build, not a note in a table.
+    if report["breaches"]:
+        return 1
+    if any(not c["refused"] for c in report["gate_checks"]):
+        return 1
+    return 0
+
+
+def cmd_compare_embeddings(args: argparse.Namespace) -> int:
+    """Compare embedding models on retrieval over the fixture mailbox."""
+    import sys as _sys
+
+    root = ROOT_DIR / "tests"
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    from eval.compare_embeddings import Candidate
+    from eval.compare_embeddings import run as run_embeddings
+
+    candidates = None
+    if args.model:
+        candidates = []
+        for spec in args.model:
+            provider, _, name = spec.partition(":")
+            if not name:
+                print(f"--model wants provider:name, got {spec!r}")
+                return 2
+            candidates.append(Candidate(name, provider, name))
+
+    report = run_embeddings(only=args.only, candidates=candidates)
+    return 0 if report else 1
+
+
+def cmd_compare(args: argparse.Namespace) -> int:
+    """Run the same fixtures through several models and print the trade-off."""
+    import sys as _sys
+
+    root = ROOT_DIR / "tests"
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    from eval.compare import run as run_compare
+
+    models = None
+    if args.model:
+        models = []
+        for spec in args.model:
+            backend, _, name = spec.partition(":")
+            if not name:
+                print(f"--model wants backend:name, got {spec!r}")
+                return 2
+            models.append((name, backend, name))
+
+    report = run_compare(passes=args.passes, batch_size=args.batch_size,
+                         only=args.only, models=models)
+    return 0 if report else 1
+
+
 def cmd_eval(args: argparse.Namespace) -> int:
     """Score the agent against recorded fixtures. Offline unless --record."""
     import sys as _sys
@@ -436,7 +517,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    serve(port=args.port, open_browser=not args.no_browser)
+    serve(port=args.port, open_browser=not args.no_browser, host=args.host)
     return 0
 
 
@@ -516,12 +597,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-v", "--verbose", action="store_true")
     # No subcommand → the UI, so a non-technical user never has to learn one.
-    parser.set_defaults(func=cmd_ui, port=8765, no_browser=False)
+    parser.set_defaults(func=cmd_ui, port=8765, no_browser=False, host="127.0.0.1")
     sub = parser.add_subparsers(dest="command")
 
     p_ui = sub.add_parser("ui", help="open the web interface (default)")
     p_ui.add_argument("--port", type=int, default=8765)
     p_ui.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    p_ui.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="interface to bind (default 127.0.0.1; 0.0.0.0 only inside a "
+        "container or behind a tunnel — see DEPLOYMENT.md)",
+    )
     p_ui.set_defaults(func=cmd_ui)
 
     def add_account_filter(p: argparse.ArgumentParser) -> None:
@@ -599,6 +686,51 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("--only", default=None,
                         help="one class: lead | hard | negative | injection")
     p_eval.set_defaults(func=cmd_eval)
+
+    p_cmp = sub.add_parser(
+        "compare",
+        help="run the fixtures through several models and compare accuracy, cost and latency",
+    )
+    p_cmp.add_argument("--passes", type=int, default=3,
+                       help="runs per model (default 3; more than one because "
+                            "triage is sampled and a single run is not a measurement)")
+    p_cmp.add_argument("--batch-size", type=int, default=10,
+                       help="messages per model call (default 10, as in a real scan)")
+    p_cmp.add_argument("--only", default=None,
+                       help="restrict to one fixture class: lead | negative | hard | injection")
+    p_cmp.add_argument("--model", action="append", default=None, metavar="BACKEND:NAME",
+                       help="override the candidate list, e.g. anthropic:claude-sonnet-5. "
+                            "Repeatable.")
+    p_cmp.set_defaults(func=cmd_compare)
+
+    p_emb = sub.add_parser(
+        "compare-embeddings",
+        help="compare embedding models on retrieval over the fixture mailbox",
+    )
+    p_emb.add_argument("--only", default=None,
+                       help="restrict to one fixture class")
+    p_emb.add_argument("--model", action="append", default=None, metavar="PROVIDER:NAME",
+                       help="override the candidates, e.g. ollama:nomic-embed-text. "
+                            "Repeatable.")
+    p_emb.set_defaults(func=cmd_compare_embeddings)
+
+    p_red = sub.add_parser(
+        "redteam",
+        help="attack the agent with prompt-injection payloads; non-zero exit on a breach",
+    )
+    p_red.add_argument("--family", default=None,
+                       help="one family: exfiltration | tool-coercion | override | "
+                            "fence-escape | obfuscation | placement")
+    p_red.set_defaults(func=cmd_redteam)
+
+    p_rq = sub.add_parser(
+        "report-quality",
+        help="score briefs for real companies: completeness, sources, freshness, readiness",
+    )
+    p_rq.add_argument("--only", default=None,
+                      help="one company id: fpt | vinamilk | samsung | shopee | "
+                           "viettel | bosch")
+    p_rq.set_defaults(func=cmd_report_quality)
 
     p_tools = sub.add_parser("tools", help="what the agent may do, and what it has done")
     p_tools.add_argument("--limit", type=int, default=20, help="audit rows to show")
