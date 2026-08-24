@@ -1,0 +1,55 @@
+# The agent on a server, reachable only through a Cloudflare tunnel.
+# This is the VPS deployment — for a live demo from your own laptop you don't
+# need Docker at all, see DEPLOYMENT.md ("Option A").
+#
+# Setup, once, on the VPS:
+#
+#   cp .env.example .env             # then fill in at least:
+#                                    #   ANTHROPIC_API_KEY=...
+#                                    #   PUBLIC_HOSTS=demo.your-domain.com
+#                                    #   TUNNEL_TOKEN=...   (from the Cloudflare
+#                                    #     dashboard: Zero Trust → Networks →
+#                                    #     Tunnels → your tunnel → token)
+#   docker compose -f docker-compose.deploy.yml up -d --build
+#
+# The tunnel is the only way in. The agent's port is published to the host's
+# loopback only (for debugging over SSH); nothing listens on a public
+# interface, so the VPS needs no open inbound ports besides SSH.
+#
+# This file is separate from docker-compose.yml on purpose: that one is the
+# observability stack (Prometheus/Grafana/Tempo) and runs anywhere; this one
+# is the agent itself and belongs on a server. They can run side by side on
+# the same VPS — set METRICS_HOST=0.0.0.0 in .env so Prometheus can scrape.
+
+services:
+  agent:
+    build: .
+    container_name: cra-agent
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      # The UI writes settings back to .env at runtime, so it is a mount, not
+      # an env_file: — changes must land on the host and survive restarts.
+      - ./.env:/app/.env
+      - ./data:/app/data
+      - ./out:/app/out
+      - ./prompts:/app/prompts
+      # Google OAuth cannot complete on a headless server (the consent screen
+      # needs a browser next to the app). Run `./start.sh auth` on your laptop
+      # and copy the credentials/ directory here — or skip Google entirely and
+      # connect the mailbox by IMAP app password in the UI.
+      - ./credentials:/app/credentials
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cra-tunnel
+    restart: unless-stopped
+    depends_on: [agent]
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    # No ports: the tunnel dials *out* to Cloudflare; nothing dials in.
+    #
+    # No named tunnel yet? For a throwaway URL, comment the line above and use:
+    #   command: tunnel --no-autoupdate --url http://agent:8765
+    # then read the random *.trycloudflare.com URL from `docker compose logs
+    # cloudflared` and set PUBLIC_HOSTS=*.trycloudflare.com in .env.

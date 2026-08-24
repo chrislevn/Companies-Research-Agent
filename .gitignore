@@ -22,6 +22,10 @@ out/
 *.sqlite
 *.sqlite3
 eval_results.json
+# The comparison results are kept, not ignored: they are the evidence that
+# the experiment was run, and they are what a reader checks the claims against.
+!compare_results.json
+!compare_embeddings_results.json
 !tests/eval/recordings/*.json
 
 # Prompts are user-editable and may carry internal detail or pasted secrets.
@@ -44,3 +48,4 @@ build/
 .DS_Store
 .idea/
 .vscode/
+data/accounts.db*

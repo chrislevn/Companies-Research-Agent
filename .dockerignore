@@ -1,0 +1,12 @@
+# Only requirements.txt, src/ and LICENSE go into the image — everything else
+# is either a secret, local state, or build noise. Keeping secrets out of the
+# build context (not just out of the image) means a stray COPY can never leak
+# them into a layer.
+*
+
+!requirements.txt
+!requirements.lock
+!src
+!LICENSE
+
+src/**/__pycache__

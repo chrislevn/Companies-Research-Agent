@@ -1,6 +1,6 @@
 # Research Agent — Project Handoff
 
-**Verified against the working tree on 22 August 2026.**
+**Verified against the working tree on 24 August 2026.**
 
 A local-first agent that reads a mailbox each morning, finds genuine new customers and
 partners among the noise, researches their companies, checks the calendar, and puts a
@@ -10,9 +10,11 @@ against a real inbox, behind a six-gate tool harness.
 | | |
 |---|---|
 | Repo | `Companies-Research-Agent` |
-| Python | ~7,900 lines |
+| Python | ~10,300 lines |
 | Mailbox | 1 Gmail, live |
-| Tests | 135 unit + a 30-fixture eval harness, all offline |
+| Tests | 283 + a 30-fixture eval harness, all offline |
+| Accounts | login/signup with sessions; first account claims the instance |
+| Deployment | Cloudflare tunnel or Docker+VPS — see `DEPLOYMENT.md` |
 
 ---
 
