@@ -380,6 +380,12 @@ def _has_credentials(spec: ToolSpec) -> bool:
         return SETTINGS.google_credentials_file.exists() or bool(
             list(SETTINGS.google_token_file.parent.glob("token*.json"))
         )
+    if spec.name in ("list_drive_files", "read_drive_file"):
+        return (
+            SETTINGS.google_service_account_file.exists()
+            or SETTINGS.google_credentials_file.exists()
+            or bool(list(SETTINGS.google_token_file.parent.glob("token*.json")))
+        )
     return True
 
 

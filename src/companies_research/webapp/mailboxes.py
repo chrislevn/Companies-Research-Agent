@@ -238,7 +238,9 @@ def add_imap_mailbox(
             },
         }
     )
-    log.info("Added IMAP mailbox %s", email)
+    from .auth import _redact
+
+    log.info("Added IMAP mailbox %s", _redact(email))
     return profile
 
 
@@ -283,7 +285,9 @@ def add_gmail_oauth_mailbox(pending: Path) -> ProviderProfile:
             "auth": {"type": "oauth_desktop", "token_file": str(token_file)},
         }
     )
-    log.info("Added Gmail mailbox %s", email)
+    from .auth import _redact
+
+    log.info("Added Gmail mailbox %s", _redact(email))
     return profile
 
 

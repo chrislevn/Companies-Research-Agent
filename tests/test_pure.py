@@ -242,3 +242,64 @@ def test_a_dead_backend_still_returns_one_result_per_message():
     results = agent.triage(messages)
     assert len(results) == 5, "a dead backend dropped messages"
     assert all(not r.should_research and r.confidence == 0.0 for r in results)
+
+
+# --- the vLLM backend keeps the same contract --------------------------------
+# It speaks the OpenAI shape rather than Ollama's, so the parsing and the
+# degrade-don't-raise behaviour get their own coverage.
+
+
+def _vllm_answering(monkeypatch, json_body=None, exc=None, status=200):
+    import httpx
+
+    from companies_research.agents import backends
+
+    def fake_post(url, **_kw):
+        if exc is not None:
+            raise exc
+        request = httpx.Request("POST", url)
+        return httpx.Response(status, json=json_body, request=request)
+
+    monkeypatch.setattr(backends.httpx, "post", fake_post)
+    return backends.VLLMBackend()
+
+
+def test_vllm_is_a_known_backend():
+    from companies_research.agents.backends import VLLMBackend, build_backend
+
+    assert isinstance(build_backend("vllm"), VLLMBackend)
+
+
+def test_vllm_parses_an_openai_shaped_reply(monkeypatch):
+    backend = _vllm_answering(monkeypatch, json_body={
+        "choices": [{"message": {"content": '{"results": []}'}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 120, "completion_tokens": 30},
+    })
+    completion = backend.complete(system="s", user="u", schema={})
+    assert completion.text == '{"results": []}'
+    assert not completion.truncated and completion.error is None
+    assert completion.usage.input_tokens == 120
+    assert completion.usage.output_tokens == 30
+
+
+def test_vllm_reports_a_cut_off_answer_as_truncated(monkeypatch):
+    backend = _vllm_answering(monkeypatch, json_body={
+        "choices": [{"message": {"content": '{"resu'}, "finish_reason": "length"}],
+    })
+    assert backend.complete(system="s", user="u", schema={}).truncated
+
+
+def test_a_missing_vllm_server_degrades_and_says_how_to_start_one(monkeypatch):
+    import httpx
+
+    backend = _vllm_answering(monkeypatch, exc=httpx.ConnectError("refused"))
+    completion = backend.complete(system="s", user="u", schema={})
+    assert completion.error and "vllm serve" in completion.error
+
+
+def test_a_vllm_rejection_surfaces_the_server_message(monkeypatch):
+    backend = _vllm_answering(monkeypatch, status=400, json_body={
+        "error": {"message": "model 'wrong-name' does not exist"},
+    })
+    completion = backend.complete(system="s", user="u", schema={})
+    assert completion.error and "wrong-name" in completion.error

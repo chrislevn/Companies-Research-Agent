@@ -1,0 +1,38 @@
+{
+  "id": "hard-13-brand-collision",
+  "class": "hard",
+  "note": "Small dental chain sharing a name with a famous tech brand — research must not merge them.",
+  "email": {
+    "message_id": "hard-13-brand-collision",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Nguyễn Thu Trang",
+      "email": "trang@apollodental-vn.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Tư vấn phần mềm quản lý chuỗi phòng khám",
+    "body_text": "Chào anh/chị,\n\nEm là Trang từ Nha khoa Apollo (Apollo Dental) — chuỗi 5 phòng khám nha khoa tại TP.HCM, không liên quan đến công ty công nghệ cùng tên. Bên em cần tư vấn giải pháp quản lý khách hàng và rất mong được báo giá.\n\nEm cảm ơn!",
+    "signature_block": "Nguyễn Thu Trang | Nha khoa Apollo | apollodental-vn.example",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer"
+    ],
+    "company_name": [
+      "Nha khoa Apollo",
+      "Apollo Dental"
+    ],
+    "domain": "apollodental-vn.example",
+    "contact_name": [
+      "Nguyễn Thu Trang",
+      "Trang"
+    ]
+  }
+}

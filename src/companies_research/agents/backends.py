@@ -2,14 +2,15 @@
 
 Triage is a classification task with a fixed JSON shape, so a backend only has
 to do one thing: take a system prompt, a user prompt and a JSON Schema, and come
-back with text that validates against that schema. Both backends below constrain
+back with text that validates against that schema. Every backend below constrains
 decoding to the schema rather than asking for JSON politely, so the caller can
 keep parsing with the same Pydantic model either way.
 
 The split exists because email is sensitive. The Anthropic backend is stronger,
-especially on Vietnamese and on thin evidence; the Ollama backend never sends a
-message body off this machine. Which of those matters more is a deployment
-decision, not a code one — hence the switch.
+especially on Vietnamese and on thin evidence; the Ollama and vLLM backends send
+message bodies only to a server you run — Ollama for a model on this machine,
+vLLM for a GPU box speaking the OpenAI-compatible API. Which of those matters
+more is a deployment decision, not a code one — hence the switch.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ class Completion:
 
 
 class TriageBackend(Protocol):
-    name: str    # which backend: "anthropic" | "ollama"
+    name: str    # which backend: "anthropic" | "ollama" | "vllm"
     model: str   # which model it will actually run — worth repeating in logs,
                  # because it is the thing that explains a surprising verdict
 
@@ -226,6 +227,111 @@ class OllamaBackend:
         return Completion(text=text, truncated=truncated)
 
 
+class VLLMBackend:
+    """Talks to a vLLM server through its OpenAI-compatible API.
+
+    Same privacy story as Ollama — the server is one you run — but this is the
+    backend for a real GPU: vLLM's continuous batching keeps the card busy, so
+    a large scan finishes several times faster than Ollama serving the same
+    weights. Structured output goes through ``response_format`` with a JSON
+    Schema, which vLLM enforces with guided decoding, so the caller parses the
+    same schema-valid JSON as everywhere else.
+    """
+
+    name = "vllm"
+
+    def __init__(self) -> None:
+        self.base_url = SETTINGS.vllm_base_url.rstrip("/")
+        self.model = SETTINGS.vllm_model
+        self.api_key = SETTINGS.vllm_api_key
+        self.timeout = SETTINGS.vllm_timeout
+
+    def describe(self) -> str:
+        return f"vLLM ({self.model} @ {self.base_url})"
+
+    def complete(self, *, system: str, user: str, schema: dict[str, Any]) -> Completion:
+        payload = {
+            "model": self.model,
+            # Same reasoning as Ollama: classification wants the same answer
+            # every run, and a short batch can otherwise flip label between scans.
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "triage_batch", "schema": schema},
+            },
+        }
+        # Only when the server was started with --api-key; loopback needs none.
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+
+        from ..obs import langfuse as _lf
+
+        gen_ctx = _lf.generation("triage", model=self.model, stage="triage",
+                                 prompt={"system": system, "user": user},
+                                 backend="vllm")
+        gen = gen_ctx.__enter__()
+        try:
+            return self._chat(payload, headers, gen)
+        finally:
+            gen_ctx.__exit__(None, None, None)
+
+    def _chat(self, payload: dict[str, Any], headers: dict[str, str], gen: Any) -> Completion:
+        try:
+            response = httpx.post(
+                f"{self.base_url}/chat/completions",
+                json=payload, headers=headers, timeout=self.timeout,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except httpx.ConnectError:
+            gen.finish(error="connect")
+            return Completion(
+                error=f"no vLLM server at {self.base_url} — "
+                "start one with `vllm serve <model>`"
+            )
+        except httpx.TimeoutException:
+            gen.finish(error="timeout")
+            return Completion(
+                error=f"vLLM did not answer within {self.timeout:.0f}s "
+                "(try a smaller model or a smaller TRIAGE_BATCH_SIZE)"
+            )
+        except httpx.HTTPStatusError as exc:
+            detail = _openai_error(exc.response)
+            gen.finish(error=f"http: {detail}")
+            return Completion(error=f"vLLM rejected the request: {detail}")
+        except Exception as exc:  # network stack, bad JSON, anything else
+            log.exception("vLLM call failed")
+            gen.finish(error=f"{type(exc).__name__}")
+            return Completion(error=f"vLLM call failed: {exc}")
+
+        choice = (body.get("choices") or [{}])[0]
+        text = ((choice.get("message") or {}).get("content") or "")
+        # "length" means the context ran out and the JSON was cut off mid-object.
+        truncated = choice.get("finish_reason") == "length"
+        if truncated:
+            log.warning(
+                "vLLM hit its length limit — lower TRIAGE_BATCH_SIZE or serve "
+                "the model with a larger --max-model-len"
+            )
+
+        # The OpenAI shape reports usage, so record it. A self-hosted model has
+        # no list price and prices at zero; the token counts still land on the
+        # dashboards, which is what you tune batch size against.
+        from ..obs import Usage
+
+        raw_usage = body.get("usage") or {}
+        usage = Usage(
+            model=self.model,
+            input_tokens=int(raw_usage.get("prompt_tokens") or 0),
+            output_tokens=int(raw_usage.get("completion_tokens") or 0),
+        )
+        gen.finish(output=text, usage=usage, truncated=truncated)
+        return Completion(text=text, truncated=truncated, usage=usage)
+
+
 def _anthropic_error(exc: Exception) -> str:
     """A short, actionable reason. Billing and auth are worth naming outright."""
     text = str(exc)
@@ -248,9 +354,25 @@ def _ollama_error(response: httpx.Response) -> str:
         return f"HTTP {response.status_code}"
 
 
+def _openai_error(response: httpx.Response) -> str:
+    """OpenAI-shaped errors nest the message; vLLM sometimes flattens it."""
+    try:
+        data = response.json()
+        error = data.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])[:300]
+        return str(error or data.get("message") or response.text)[:300]
+    except Exception:
+        return f"HTTP {response.status_code}"
+
+
 # --- selection -------------------------------------------------------------
 
-BACKENDS = {"anthropic": AnthropicBackend, "ollama": OllamaBackend}
+BACKENDS = {
+    "anthropic": AnthropicBackend,
+    "ollama": OllamaBackend,
+    "vllm": VLLMBackend,
+}
 
 
 def build_backend(name: str | None = None) -> TriageBackend:

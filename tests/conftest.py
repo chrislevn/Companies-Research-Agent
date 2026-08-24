@@ -30,12 +30,29 @@ def _isolate_state(monkeypatch, tmp_path):
     # Metrics bind a port; a suite that starts servers is a suite that flakes.
     monkeypatch.setenv("METRICS_ENABLED", "false")
     monkeypatch.setenv("TRACING_ENABLED", "false")
+    # And never a real Langfuse: a test that traces into the developer's
+    # project is polluting the same store the eval lane is graded from.
+    monkeypatch.setenv("LANGFUSE_ENABLED", "false")
+    monkeypatch.setenv("LANGFUSE_PROMPTS_ENABLED", "false")
+    # Guardrails are on by default in production, but a test that builds a
+    # real NeMo engine is a test that downloads models and talks to Ollama.
+    # tests/test_guardrails.py opts back in with stubs.
+    monkeypatch.setenv("GUARDRAILS_ENABLED", "false")
 
+    from companies_research import config as config_module
     from companies_research.config import reload_settings
     from companies_research.tools.registry import RATE
+
+    # reload_settings() re-reads .env with override=True, which would clobber
+    # every monkeypatched value above with whatever the developer's .env says.
+    # For the duration of a test, "the .env file" is an empty temp path: a test
+    # sees process env plus its own monkeypatches, never the developer's state.
+    original_env_file = config_module.ENV_FILE
+    config_module.ENV_FILE = tmp_path / "test.env"
 
     reload_settings()
     RATE.reset()
     yield
     RATE.reset()
+    config_module.ENV_FILE = original_env_file
     reload_settings()

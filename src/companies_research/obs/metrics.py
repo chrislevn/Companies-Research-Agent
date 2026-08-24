@@ -95,6 +95,11 @@ BRIEF_COST = _histogram(
 SCAN_LEADS = _counter(
     "agent_scan_leads_total", "Messages by what the scan decided about them", ["outcome"]
 )
+GUARDRAILS_FLAGGED = _counter(
+    "agent_guardrails_flagged_total",
+    "Messages the NeMo Guardrails input rail flagged, by what was done about it",
+    ["mode"],
+)
 
 # Health and uptime. Prometheus already synthesises `up` for a target it can
 # reach, which answers "is it listening" — these answer the two questions that
@@ -129,8 +134,7 @@ def mark_started() -> None:
     BUILD_INFO.labels(
         version=_version(),
         triage_backend=SETTINGS.triage_backend or "anthropic",
-        triage_model=(SETTINGS.ollama_model if SETTINGS.triage_backend == "ollama"
-                      else SETTINGS.triage_model),
+        triage_model=SETTINGS.active_triage_model,
         research_provider=SETTINGS.research_provider or "claude_web",
     ).set(1)
 
@@ -183,6 +187,10 @@ def record_brief_cost(cost_usd: float) -> None:
 def record_scan_outcome(outcome: str, count: int = 1) -> None:
     if count > 0:
         SCAN_LEADS.labels(outcome=outcome).inc(count)
+
+
+def record_guardrails_flag(mode: str) -> None:
+    GUARDRAILS_FLAGGED.labels(mode=mode).inc()
 
 
 # --- server ----------------------------------------------------------------

@@ -322,7 +322,7 @@ def research_leads(
     """Look up each lead's company, newest first, and cache what comes back.
 
     Keyed by domain, so several people writing from one company cost one lookup,
-    and a company already researched this fortnight costs nothing at all.
+    and a company already researched this month costs nothing at all.
     """
     from .research import build_researcher  # local: keeps the import optional
 

@@ -20,7 +20,7 @@ use, and a command line for servers and scheduled jobs.
 
 All five steps are built. Every capability the agent has runs behind a
 [six-gate tool harness](#the-tool-harness), and `./start.sh eval` scores it against
-30 recorded fixtures offline.
+42 recorded fixtures offline.
 
 All five steps are implemented.
 
@@ -84,6 +84,22 @@ PaaS, the stable-URL variant, the always-on VPS option
 (`docker-compose.deploy.yml`), what the four request guards check, and the
 checklist to run through before sharing the URL.
 
+### Using it from Claude or ChatGPT — MCP
+
+The pipeline is also an [MCP](https://modelcontextprotocol.io) server: Claude
+Desktop, Claude Code, claude.ai and ChatGPT can scan the inbox, research
+companies and walk the brief queue as tool calls, with the same six-gate
+harness deciding what actually happens — no connected model can grant itself
+`brief:deliver` or reach a recipient outside the allow-list.
+
+```bash
+./start.sh mcp          # stdio, for Claude Desktop / Claude Code on this machine
+./start.sh mcp --http   # streamable HTTP, for claude.ai / ChatGPT behind a tunnel
+```
+
+[MCP.md](MCP.md) has the per-client setup, the tool list, and what a
+connected model can and cannot do.
+
 ---
 
 ## Command line
@@ -106,7 +122,9 @@ python -m companies_research brief agora.io      # assemble the brief (--html, -
 python -m companies_research calendar agora.io   # upcoming meetings with them
 python -m companies_research tools               # scopes, tools and the audit trail
 python -m companies_research eval                # score against recorded fixtures
+python -m companies_research langfuse verify     # the eval lane in Langfuse, checked
 python -m companies_research prompts --show      # which prompts are in use
+python -m companies_research mcp                 # serve the pipeline over MCP (see MCP.md)
 python -m companies_research purge <user_id>
 ```
 
@@ -147,11 +165,19 @@ scan continues.
 - **Data:** message bodies are sent to the Anthropic API for triage. Quoted reply chains
   and attachments are stripped first, and bodies are truncated, but this still needs a
   DPA and possibly a zero-data-retention agreement before rollout.
-- **Erasure:** `python -m companies_research purge <user_id>` deletes everything stored
-  for one person; `Store.purge_older_than()` implements a retention window.
-- **The web interface is for a single operator.** It binds to `127.0.0.1` and is gated
-  by a per-run token, which is enough to stop another website driving it, but it has no
-  user accounts. Do not expose it on a network — run the CLI on servers.
+- **Erasure:** `python -m companies_research purge <user_id>` deletes everything derived
+  from that person's mail: their known senders and processed messages, their chat-agent
+  memories, the briefs built from them (including delivered copies in `out/briefs/`),
+  the cached research for their companies, and the free-text error column of the audit
+  trail. It deliberately keeps
+  web login accounts (credentials, not mail data — removed from the interface) and scan
+  timestamps. `Store.purge_older_than()` implements a retention window.
+- **The web interface is single-tenant with a login wall.** It binds to `127.0.0.1`,
+  is gated by a per-run token and by accounts — the first signup claims the instance
+  and is the only account that can change settings, swap the API key or purge; signup
+  then closes unless `SIGNUP_OPEN=true`. All signed-in accounts see the same data:
+  accounts answer *who may enter*, not *whose data is whose*. Expose it beyond this
+  machine only via the tunnel setup in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## How "new" is decided
 
@@ -243,6 +269,17 @@ env exfiltration, fake tool calls, tool-name confusion, base64, homoglyphs,
 delimiter escape, Vietnamese, signature-hidden, multi-stage). Every test asserts the
 attempt was **denied at a named gate**, never that a filter matched a string — and
 the suite is mutation-tested: disabling either control makes it fail.
+
+A third layer sits in front of all that, on by default: every inbound email runs
+through an [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
+input rail before triage reads it — screened by the *local* Ollama model, so it
+costs nothing and no mail leaves the machine. It fails open (a machine without
+NeMo or Ollama warns once and triages unscreened), which is what makes default-on
+safe; `GUARDRAILS_ENABLED=false` opts out. Advisory by default (a log line and
+an `agent_guardrails_flagged_total` metric); `GUARDRAILS_MODE=enforce` also
+downgrades flagged mail to skip. In the red-team suite the rail flags 13 of the 16
+attack payloads before triage ever sees them — and with it off, the gates still
+hold all 16, which is the property that matters (`agents/rails.py`).
 
 Argument models use `extra="forbid"` and carry identifiers only, never message bodies:
 the registry hashes the arguments and throws the values away, so an audit row can never
@@ -411,16 +448,59 @@ project, user and API keys, so the values already in `.env.example` are correct 
 boot — sign in with `local@example.com` / `localdevpassword`.
 
 **Content capture is off by default, and that default is the point.** What Langfuse is good
-at showing is exactly what this project promises never to log: message bodies and the names
-of real people. So the default sends the *shape* of each call — model, tokens, cost,
-latency, batch size, stop reason, confidence — which answers "is triage drifting" and
-"where is the money going" without shipping anyone's mail into a second datastore.
+at showing is exactly what this project keeps out of its logs: message bodies, addresses
+and the names of real people. At INFO — the level the web job pane mirrors and a container
+deploy persists — senders appear only as stable hash tokens, never as addresses or
+subjects; `-v` (DEBUG) is the deliberate debugging exception that prints subjects on this
+machine. The Langfuse default likewise sends the *shape* of each call — model, tokens,
+cost, latency, batch size, stop reason, confidence — which answers "is triage drifting"
+and "where is the money going" without shipping anyone's mail into a second datastore.
 
 `LANGFUSE_CAPTURE_CONTENT=true` sends prompts and completions too, with addresses replaced
 by a stable hash: the same sender is the same token every time, so "this one again" stays
 answerable without knowing who they are. It is better for debugging one bad verdict, and it
 is a partial copy of your mailbox in a Postgres container. It warns on startup, and it is
 never the default.
+
+### The eval lane in Langfuse — prompts, datasets, experiments, annotation
+
+Tracing shows single calls. The eval lane puts the *experiments* there too, so a model
+comparison is something you can reopen, re-score and annotate rather than a table that
+scrolled away:
+
+```bash
+./start.sh langfuse sync                 # prompts, datasets, score configs, annotation queue
+./start.sh langfuse experiment --replay  # free offline run: proves the whole loop
+./start.sh langfuse experiment           # one run per model over the fixtures — the A/B
+./start.sh langfuse quality              # the six report criteria, as scores (live web)
+./start.sh langfuse verify               # asks the server what actually exists; CI calls this
+```
+
+`sync` is idempotent and safe on every push: prompts only grow a version when the text
+changed, dataset items upsert by fixture id, configs and the queue are created once.
+What lands where:
+
+- **Prompts** — `triage` and `research`, versioned under the `production` label. With
+  `LANGFUSE_PROMPTS_ENABLED=true` the agent *serves* its prompts from there, so editing a
+  prompt in the Langfuse UI and moving the label rolls it out (or back) with no deploy.
+  Any fetch problem falls back to the file or the built-in; Langfuse being down can never
+  stop a scan.
+- **Datasets** — `triage-fixtures` (the 42 offline fixtures) and
+  `report-quality-enquiries` (the six real companies). Synthetic mail only; nothing from a
+  real mailbox is in either.
+- **Experiments** — `experiment` runs one Langfuse run per model over the fixtures: every
+  item is a trace linked to its dataset item, every scored field is a score
+  (`triage.domain`, `triage.accuracy`, …) using the *same* scorer `eval` and `compare`
+  print, and run-level scores carry the deciding numbers — `false_positive_rate` on the
+  negative class and `injection_held_rate`. Select the runs and hit Compare for the A/B
+  table. `--judge` adds an LLM judge on the one field binary scoring cannot reach
+  (`intent_summary` faithfulness); it gets its own score name and never feeds accuracy.
+- **Human annotation** — items the scorer failed land in the `triage-review` queue with
+  three configs a reviewer fills in: verdict, usefulness 1–5, and a free-text note.
+- **Verification** — `verify` checks it all against the public REST API with no SDK in
+  between: health, both prompts labelled, item counts, all 17 score configs, the queue,
+  at least one run, and that scores actually landed. Exit code 0 or a named list of what
+  is missing and which command creates it.
 
 ## Evaluation
 
@@ -429,8 +509,9 @@ never the default.
 ./start.sh eval --record    # live: re-runs the API and updates the recordings
 ```
 
-30 fixtures — 10 straightforward leads, 10 hard cases, 7 negatives, 3 injections. Real
-inbox structure, invented people and companies.
+42 fixtures — 14 straightforward leads, 13 hard cases, 10 negatives, 5 injections. Real
+inbox structure, invented people and companies; leads span Vietnamese, English and German
+because the mailbox this agent watches does.
 
 **Scoring is per-field and binary.** A 1-10 quality score from a model judge looks
 precise and is not: score the same output twice and you get different numbers, and nobody
@@ -585,7 +666,7 @@ src/companies_research/
 │   └── imap.py        # generic IMAP
 ├── agents/
 │   ├── triage.py      # the triage agent — prompt, batching, fallbacks
-│   └── backends.py    # where it runs: Anthropic API or local Ollama
+│   └── backends.py    # where it runs: Anthropic API, local Ollama, or a vLLM server
 ├── research/
 │   ├── base.py        # ResearchProvider protocol, ResearchOutcome
 │   └── claude_web.py  # Claude's hosted web search + fetch
@@ -608,8 +689,8 @@ The interface writes these for you; edit `.env` directly only if you prefer.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `TRIAGE_BACKEND` | `anthropic` | `anthropic` or `ollama` — see [Running triage locally](#running-triage-locally) |
-| `TRIAGE_BATCH_SIZE` | 10 / 4 | Emails per model call; defaults to 4 on `ollama` |
+| `TRIAGE_BACKEND` | `anthropic` | `anthropic`, `ollama` or `vllm` — see [Running triage locally](#running-triage-locally) |
+| `TRIAGE_BATCH_SIZE` | 10 / 4 | Emails per model call; defaults to 4 on `ollama` and `vllm` |
 | `ANTHROPIC_API_KEY` | — | Optional if you use `ant auth login` or `ANTHROPIC_AUTH_TOKEN` |
 | `TRIAGE_MODEL` | `claude-opus-5` | Use `claude-haiku-4-5` for high volume |
 | `TRIAGE_EFFORT` | `low` | Triage is a cheap classification; raise if accuracy suffers |
@@ -617,6 +698,10 @@ The interface writes these for you; edit `.env` directly only if you prefer.
 | `OLLAMA_MODEL` | `qwen3:8b` | Pull it first with `ollama pull` |
 | `OLLAMA_NUM_CTX` | `16384` | Ollama's default is too small for a batch and drops overflow silently |
 | `OLLAMA_TIMEOUT` | `600` | Seconds before a local batch is given up on |
+| `VLLM_BASE_URL` | `http://localhost:8000/v1` | Only used when `TRIAGE_BACKEND=vllm`; OpenAI-compatible, so it ends in `/v1` |
+| `VLLM_MODEL` | `Qwen/Qwen3-8B` | Must match the name the server was started with |
+| `VLLM_API_KEY` | unset | Only if the server runs with `--api-key` |
+| `VLLM_TIMEOUT` | `600` | Seconds before a vLLM batch is given up on |
 | `RESEARCH_ENABLED` | `true` | Set false to stop after triage |
 | `RESEARCH_MODEL` | `claude-opus-5` | Research always runs on a hosted model |
 | `RESEARCH_EFFORT` | `medium` | `low` is much faster and cheaper per company |
@@ -653,6 +738,28 @@ That is the whole change — same prompt, same JSON schema, same `TriageResult`.
 Ollama constrains decoding to the schema, so the local path is as parseable as the
 hosted one; a model that cannot answer degrades to a low-confidence `unknown`
 exactly like an API failure does.
+
+**With a GPU: vLLM.** Ollama is the two-command path; vLLM is the fast one.
+Continuous batching keeps the card busy across a batch, so a large scan finishes
+several times faster than Ollama serving the same weights — and it speaks the
+OpenAI-compatible API, so the server can live on any machine you control, not
+just this one:
+
+```bash
+pip install vllm
+vllm serve Qwen/Qwen3-8B
+```
+
+```ini
+TRIAGE_BACKEND=vllm
+VLLM_MODEL=Qwen/Qwen3-8B                  # must match `vllm serve`
+VLLM_BASE_URL=http://localhost:8000/v1    # or a GPU box on your own network
+```
+
+Structured output goes through `response_format`, which vLLM enforces with
+guided decoding — same schema, same fallbacks as the other two backends. The
+privacy story is the same as Ollama's as long as the address you point it at is
+yours: mail goes to that server and nowhere else.
 
 **Choosing a model.** Pick a general *instruct* model, not a coder-tuned one —
 coder models mislabel business email and ignore the "reply in the sender's

@@ -1,0 +1,39 @@
+{
+  "id": "lead-12-fintech-vn",
+  "class": "lead",
+  "note": "Vietnamese fintech lead, diacritics and legal-form prefix in the name.",
+  "email": {
+    "message_id": "lead-12-fintech-vn",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Phạm Thị Hồng Nhung",
+      "email": "nhung.pham@songlongpay.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Hợp tác tích hợp cổng thanh toán",
+    "body_text": "Kính gửi anh/chị,\n\nEm là Nhung, phụ trách phát triển đối tác tại Công ty Cổ phần Thanh toán Song Long. Bên em đang tìm giải pháp OCR hoá đơn để tích hợp vào cổng thanh toán và rất mong được trao đổi với đội ngũ anh/chị trong tuần tới.\n\nEm cảm ơn ạ!\nNhung",
+    "signature_block": "Phạm Thị Hồng Nhung | Phát triển Đối tác | Thanh toán Song Long | songlongpay.example",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "partner",
+      "customer"
+    ],
+    "company_name": [
+      "Thanh toán Song Long",
+      "Song Long"
+    ],
+    "domain": "songlongpay.example",
+    "contact_name": [
+      "Phạm Thị Hồng Nhung",
+      "Nhung"
+    ]
+  }
+}

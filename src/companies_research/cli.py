@@ -106,6 +106,19 @@ def cmd_accounts(args: argparse.Namespace) -> int:
 
 def cmd_auth(args: argparse.Namespace) -> int:
     """Run each account's interactive auth flow and confirm it works."""
+    if getattr(args, "drive", False):
+        # Consent for Drive happens here, not mid-chat: the same command that
+        # owns every other consent. Separate token, Drive-only scope.
+        from . import drive
+
+        try:
+            listing = drive.list_files(page_size=1)
+        except Exception as exc:
+            print(f"  ✗ Drive: {exc}", file=sys.stderr)
+            return 1
+        print(f"  ✓ Drive authorised — {listing['total_files']} file(s) visible")
+        return 0
+
     accounts = load_accounts()
     if args.account:
         accounts = [a for a in accounts if a.account_id in set(args.account)]
@@ -242,6 +255,52 @@ def cmd_redteam(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_langfuse(args: argparse.Namespace) -> int:
+    """The eval lane in Langfuse: sync assets, run experiments, verify."""
+    import sys as _sys
+
+    root = ROOT_DIR / "tests"
+    if str(root) not in _sys.path:
+        _sys.path.insert(0, str(root))
+    from eval.langfuse_lane import LaneError
+
+    try:
+        if args.action == "sync":
+            from eval.langfuse_sync import run as run_sync
+
+            run_sync()
+            return 0
+
+        if args.action == "experiment":
+            from eval.langfuse_experiment import run as run_experiment
+
+            models = None
+            if args.model:
+                models = []
+                for spec in args.model:
+                    backend, _, name = spec.partition(":")
+                    if not name:
+                        print(f"--model wants backend:name, got {spec!r}")
+                        return 2
+                    models.append((name, backend, name))
+            results = run_experiment(models=models, replay=args.replay,
+                                     judge=args.judge)
+            return 0 if results else 1
+
+        if args.action == "quality":
+            from eval.langfuse_experiment import run_quality
+
+            return 0 if run_quality(only=args.only) else 1
+
+        # verify — the exit code is the point: CI calls this.
+        from eval.langfuse_verify import run as run_verify
+
+        return 0 if run_verify() else 1
+    except LaneError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 2
+
+
 def cmd_compare_embeddings(args: argparse.Namespace) -> int:
     """Compare embedding models on retrieval over the fixture mailbox."""
     import sys as _sys
@@ -344,12 +403,205 @@ def cmd_tools(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- interactive chat demo --------------------------------------------------
+
+# What each role may do. "user" is every read; "admin" adds the one write the
+# demo has. Neither includes brief:deliver — the chat demo never sends anything.
+ROLE_SCOPES = {
+    "admin": ("drive:read", "memory:read", "memory:write",
+              "research:read", "mail:read", "calendar:read"),
+    "user": ("drive:read", "memory:read",
+             "research:read", "mail:read", "calendar:read"),
+}
+
+CHAT_HELP = """\
+Commands:
+  /audit    show the audit log (every tool call, all six gates)
+  /memory   show everything in long-term memory
+  /index    embed this agent's research and briefs into memory (RAG over
+            what it already knows)
+  /tools    show tools and granted scopes
+  /clear    forget this conversation (long-term memory stays)
+  /help     this message
+  /quit     exit
+"""
+
+
+def _print_tool_event(name: str, args: dict, result) -> None:
+    """One line per tool call, so the terminal shows the agent working."""
+    shown = {k: (v[:60] + "…" if isinstance(v, str) and len(v) > 60 else v)
+             for k, v in args.items()}
+    arg_text = ", ".join(f"{k}={v!r}" for k, v in shown.items())
+    if isinstance(result, dict) and result.get("status") == "denied":
+        print(f"  [x] {name}({arg_text}) DENIED at {result.get('gate')} gate: "
+              f"{result.get('reason')}")
+        return
+    if isinstance(result, dict) and result.get("status") == "error":
+        print(f"  [!] {name}({arg_text}) error: {str(result.get('error'))[:150]}")
+        return
+    if isinstance(result, dict):
+        if "total_files" in result:
+            summary = f"{result['total_files']} file(s)"
+        elif "results_count" in result:
+            summary = f"{result['results_count']} memory match(es)"
+        elif "saved_chunks" in result:
+            summary = f"saved {result['saved_chunks']} chunk(s)"
+        elif "file_name" in result:
+            summary = f"read {result['file_name']} ({len(result.get('content', ''))} chars)"
+            if result.get("screening"):
+                summary += " [guardrails flagged]"
+        elif "leads" in result:
+            summary = f"{result.get('total', 0)} lead(s)"
+        elif "briefs" in result:
+            summary = f"{result.get('total', 0)} brief(s)"
+        elif "profile" in result or "found" in result:
+            summary = ("research found" if result.get("found")
+                       else "no research cached")
+        elif "meetings" in result:
+            count = len(result.get("meetings") or [])
+            summary = (f"{count} meeting(s)" if result.get("checked")
+                       else f"could not look ({result.get('reason', '')[:60]})")
+        else:
+            summary = "ok"
+    else:
+        summary = "ok"
+    print(f"  [+] {name}({arg_text}) -> {summary}")
+
+
+def _print_chat_audit(limit: int) -> None:
+    from .tools import GATES
+
+    rows = Store().recent_tool_calls(limit=limit)
+    if not rows:
+        print("\n[no tool calls recorded yet]")
+        return
+    rows.reverse()  # oldest first reads like a story
+    print(f"\n--- AUDIT LOG (last {len(rows)} call(s), gates: "
+          f"{' -> '.join(GATES)}) ---")
+    for row in rows:
+        gates = row["gate_results"]
+        trail = "  ".join(
+            f"{gate}={'ok' if gates[gate] else 'DENY'}" if gate in gates else f"{gate}=-"
+            for gate in GATES
+        )
+        verdict = f"DENIED at {row['denied_at']}" if row["denied_at"] else "ok"
+        print(f"  {row['ts'][:19]}  {row['tool']:<18} {row['caller']:<12} "
+              f"{row['duration_ms']:>5}ms  {verdict}")
+        print(f"      {trail}")
+    print("--- END AUDIT LOG ---")
+
+
+def _print_memories() -> None:
+    rows = Store().list_memories()
+    if not rows:
+        print("\n[no memories stored yet]")
+        return
+    print(f"\n--- MEMORIES ({len(rows)} row(s), newest first) ---")
+    for row in rows:
+        text = row["text"].replace("\n", " ")
+        text = text[:100] + "…" if len(text) > 100 else text
+        origin = f" (from {row['source']})" if row["source"] else ""
+        print(f"  [{row['category']}]{origin} {text}")
+    print("--- END MEMORIES ---")
+
+
+def cmd_chat(args: argparse.Namespace) -> int:
+    """Interactive agent over Drive + RAG memory — the harness demo, in a terminal."""
+    import os
+
+    from . import tools as harness
+    from .config import SETTINGS, refresh_settings_from_env
+
+    os.environ["TOOL_SCOPES"] = ",".join(ROLE_SCOPES[args.role])
+    refresh_settings_from_env()
+
+    from .agents.chat import ChatAgent
+
+    harness.set_caller(f"chat:{args.role}")
+    try:
+        agent = ChatAgent(backend=args.backend, model=args.model,
+                          on_tool=_print_tool_event)
+    except ValueError as exc:
+        print(exc)
+        return 2
+
+    print(f"\nAgent chat — {agent.describe()}, role={args.role} "
+          f"(scopes: {', '.join(sorted(SETTINGS.tool_scopes))})")
+    print(CHAT_HELP)
+
+    def one_turn(text: str) -> None:
+        try:
+            reply = agent.run(text)
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            print(f"\n[error: {exc}]")
+            return
+        print(f"\nAssistant: {reply}")
+
+    def handle(text: str) -> bool:
+        """Run one input, command or message. Returns False to exit."""
+        lowered = text.lower()
+        if lowered in ("/quit", "/exit"):
+            return False
+        if lowered == "/help":
+            print(CHAT_HELP)
+        elif lowered == "/clear":
+            agent.clear()
+            print("[conversation cleared — long-term memory kept]")
+        elif lowered == "/audit":
+            _print_chat_audit(limit=args.limit)
+        elif lowered == "/memory":
+            _print_memories()
+        elif lowered == "/index":
+            from . import memory
+
+            try:
+                counts = memory.index_knowledge()
+            except memory.MemoryUnavailable as exc:
+                print(f"[cannot index: {exc}]")
+            else:
+                print(f"[indexed {counts['research']} research profile(s) and "
+                      f"{counts['briefs']} brief(s) as {counts['chunks']} memory "
+                      f"chunk(s)]")
+        elif lowered == "/tools":
+            for spec in harness.describe_registry():
+                state = "available" if spec["granted"] else "refused (missing scope)"
+                print(f"  {spec['name']:<18} {','.join(spec['scopes']):<14} {state}")
+        elif lowered.startswith("/"):
+            print(f"[unknown command {text!r} — /help lists them]")
+        else:
+            one_turn(text)
+        return True
+
+    if args.message:
+        for text in args.message:
+            print(f"\nYou: {text}")
+            if not handle(text.strip()):
+                break
+        return 0
+
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBye.")
+            return 0
+        if not user_input:
+            continue
+        if not handle(user_input):
+            print("Bye.")
+            return 0
+
+
 def _known_prompts() -> dict[str, str]:
     """Editable prompts, mapped to their built-in default."""
+    from .agents.chat import DEFAULT_SYSTEM_PROMPT as CHAT_DEFAULT
     from .agents.triage import SYSTEM_PROMPT as TRIAGE_DEFAULT
     from .research.claude_web import DEFAULT_SYSTEM_PROMPT as RESEARCH_DEFAULT
 
-    return {"research": RESEARCH_DEFAULT, "triage": TRIAGE_DEFAULT}
+    return {"chat": CHAT_DEFAULT, "research": RESEARCH_DEFAULT,
+            "triage": TRIAGE_DEFAULT}
 
 
 def cmd_prompts(args: argparse.Namespace) -> int:
@@ -527,6 +779,25 @@ def cmd_purge(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve the pipeline over MCP for Claude and ChatGPT — see MCP.md."""
+    try:
+        from .mcp_server import run as run_mcp
+    except ImportError as exc:
+        print(
+            f"The MCP server needs an extra package that isn't installed ({exc.name}).\n"
+            "Run:  pip install -r requirements.txt",
+            file=sys.stderr,
+        )
+        return 2
+    run_mcp(
+        transport="streamable-http" if args.http else "stdio",
+        host=args.host,
+        port=args.port,
+    )
+    return 0
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -625,6 +896,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_auth = sub.add_parser("auth", help="run interactive auth for each account")
     add_account_filter(p_auth)
+    p_auth.add_argument("--drive", action="store_true",
+                        help="consent Google Drive (read-only) for the chat command")
     p_auth.set_defaults(func=cmd_auth)
 
     p_seed = sub.add_parser(
@@ -732,10 +1005,58 @@ def build_parser() -> argparse.ArgumentParser:
                            "viettel | bosch")
     p_rq.set_defaults(func=cmd_report_quality)
 
+    p_lf = sub.add_parser(
+        "langfuse",
+        help="sync prompts/datasets to Langfuse, run model experiments, verify",
+    )
+    lf_sub = p_lf.add_subparsers(dest="action", required=True)
+    lf_sub.add_parser(
+        "sync", help="push prompts, datasets, score configs and the annotation queue"
+    )
+    p_lf_exp = lf_sub.add_parser(
+        "experiment",
+        help="one Langfuse run per model over the fixtures — the A/B compare",
+    )
+    p_lf_exp.add_argument("--model", action="append", default=None,
+                          metavar="BACKEND:NAME",
+                          help="override the candidates, e.g. anthropic:claude-sonnet-5. "
+                               "Repeatable.")
+    p_lf_exp.add_argument("--replay", action="store_true",
+                          help="answer from the recordings: free, offline, proves the loop")
+    p_lf_exp.add_argument("--judge", action="store_true",
+                          help="also run the LLM judge on intent_summary faithfulness")
+    p_lf_q = lf_sub.add_parser(
+        "quality", help="the report-quality harness as a Langfuse run (live web, slow)"
+    )
+    p_lf_q.add_argument("--only", default=None,
+                        help="one company id: fpt | vinamilk | samsung | shopee | "
+                             "viettel | bosch")
+    lf_sub.add_parser(
+        "verify",
+        help="check prompts, datasets, runs, scores and the queue against the "
+             "public API; non-zero exit if anything is missing",
+    )
+    p_lf.set_defaults(func=cmd_langfuse)
+
     p_tools = sub.add_parser("tools", help="what the agent may do, and what it has done")
     p_tools.add_argument("--limit", type=int, default=20, help="audit rows to show")
     p_tools.add_argument("--denied", action="store_true", help="only refused calls")
     p_tools.set_defaults(func=cmd_tools)
+
+    p_chat = sub.add_parser(
+        "chat",
+        help="interactive agent: Google Drive + long-term RAG memory, every "
+             "call through the six gates",
+    )
+    p_chat.add_argument("--role", choices=sorted(ROLE_SCOPES), default="admin",
+                        help="admin may write memory; user is read-only")
+    p_chat.add_argument("--backend", choices=("ollama", "anthropic"), default="",
+                        help="where the chat model runs (default: TRIAGE_BACKEND)")
+    p_chat.add_argument("--model", default="", help="model override for the chosen backend")
+    p_chat.add_argument("-m", "--message", action="append",
+                        help="run one message and exit (repeatable, in order)")
+    p_chat.add_argument("--limit", type=int, default=30, help="audit rows /audit shows")
+    p_chat.set_defaults(func=cmd_chat)
 
     p_prompts = sub.add_parser("prompts", help="show or customise the agent prompts")
     p_prompts.add_argument("name", nargs="?", help="research | triage (default: all)")
@@ -748,6 +1069,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_purge = sub.add_parser("purge", help="delete all stored data for one user (erasure request)")
     p_purge.add_argument("user_id")
     p_purge.set_defaults(func=cmd_purge)
+
+    p_mcp = sub.add_parser(
+        "mcp", help="serve the agent over MCP for Claude and ChatGPT (see MCP.md)"
+    )
+    p_mcp.add_argument("--http", action="store_true",
+                       help="streamable HTTP instead of stdio (for remote clients "
+                            "— claude.ai and ChatGPT connectors, behind a tunnel)")
+    p_mcp.add_argument("--host", default="127.0.0.1",
+                       help="interface to bind in --http mode (default 127.0.0.1; "
+                            "0.0.0.0 only inside a container — see MCP.md)")
+    p_mcp.add_argument("--port", type=int, default=8766,
+                       help="port for --http mode (default 8766)")
+    p_mcp.set_defaults(func=cmd_mcp)
 
     return parser
 

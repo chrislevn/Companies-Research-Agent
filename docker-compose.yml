@@ -25,7 +25,7 @@ services:
       - ./alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     extra_hosts:
       # Lets the container scrape the agent running on the host. Native on
       # Docker Desktop; this line is what makes it work on Linux too.
@@ -47,7 +47,7 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   # Receives OTLP spans when TRACING_ENABLED=true, and serves the trace UI.
   tempo:
@@ -58,8 +58,8 @@ services:
       - ./tempo.yml:/etc/tempo.yml:ro
       - tempo-data:/var/tempo
     ports:
-      - "4318:4318"   # OTLP/HTTP — where OTLP_ENDPOINT points
-      - "3200:3200"   # query API
+      - "127.0.0.1:4318:4318"   # OTLP/HTTP — where OTLP_ENDPOINT points
+      - "127.0.0.1:3200:3200"   # query API
 
 volumes:
   prometheus-data:

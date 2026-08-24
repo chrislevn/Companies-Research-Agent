@@ -1,0 +1,38 @@
+{
+  "id": "hard-11-subsidiary",
+  "class": "hard",
+  "note": "Subsidiary writing from the parent group's domain. The company is the subsidiary named in the text, not the domain owner.",
+  "email": {
+    "message_id": "hard-11-subsidiary",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Đỗ Quang Huy",
+      "email": "huy.do@thaibinh-group.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Giới thiệu dịch vụ kho lạnh - Thái Bình Cold Chain",
+    "body_text": "Kính gửi quý công ty,\n\nTôi là Huy, đại diện Thái Bình Cold Chain — công ty thành viên của Tập đoàn Thái Bình — chuyên vận hành kho lạnh và vận tải lạnh khu vực phía Bắc. Chúng tôi muốn tìm hiểu về giải pháp của quý công ty cho đội xe 60 chiếc của mình.\n\nTrân trọng,\nHuy",
+    "signature_block": "Đỗ Quang Huy | Thái Bình Cold Chain | thaibinh-group.example",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer",
+      "partner"
+    ],
+    "company_name": [
+      "Thái Bình Cold Chain",
+      "Thai Binh Cold Chain"
+    ],
+    "contact_name": [
+      "Đỗ Quang Huy",
+      "Huy"
+    ]
+  }
+}

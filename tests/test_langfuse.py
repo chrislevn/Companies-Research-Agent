@@ -130,17 +130,19 @@ def _published(service) -> list[str]:
     return [str(p).split(":")[-2] for p in service.get("ports", [])]
 
 
+def _host_port(port) -> str:
+    """The host-side port of a compose mapping, with or without a bind IP."""
+    return str(port).strip('"').split(":")[-2]
+
+
 def test_langfuse_never_claims_a_port_the_other_stack_uses():
     """3000 is Grafana and 9090 is Prometheus; upstream wants both."""
     main = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
-    taken = set()
-    for svc in main.values():
-        for port in svc.get("ports", []):
-            taken.add(str(port).strip('"').split(":")[0])
+    taken = {_host_port(p) for svc in main.values() for p in svc.get("ports", [])}
 
     for name, svc in _lfyaml()["services"].items():
         for port in svc.get("ports", []):
-            host = str(port).split(":")[0] if str(port).count(":") == 1 else str(port).split(":")[1]
+            host = _host_port(port)
             assert host not in taken, f"{name} publishes {host}, already used by the metrics stack"
 
 
@@ -148,10 +150,26 @@ def test_the_agent_default_host_matches_the_port_langfuse_publishes():
     from companies_research.config import SETTINGS
 
     web = _lfyaml()["services"]["langfuse-web"]
-    published = [str(p).split(":")[0] for p in web["ports"]]
+    published = [_host_port(p) for p in web["ports"]]
     assert any(p in SETTINGS.langfuse_host for p in published), (
         f"LANGFUSE_HOST is {SETTINGS.langfuse_host} but langfuse-web publishes {published}"
     )
+
+
+def test_every_published_port_binds_loopback_only():
+    """A port published without a bind IP is on every interface, and Docker's
+    iptables rules walk straight past ufw — on a VPS that is public. Grafana
+    here is anonymous-admin and Langfuse holds mail-derived data, so every
+    mapping must carry the 127.0.0.1: prefix; reaching one remotely is what
+    SSH tunnels are for."""
+    for filename in ("docker-compose.yml", "docker-compose.langfuse.yml",
+                     "docker-compose.deploy.yml"):
+        services = yaml.safe_load((ROOT / filename).read_text())["services"]
+        for name, svc in services.items():
+            for port in svc.get("ports", []):
+                assert str(port).strip('"').startswith("127.0.0.1:"), (
+                    f"{filename}: {name} publishes {port} beyond loopback"
+                )
 
 
 def test_no_s3_url_still_points_at_the_old_minio_port():

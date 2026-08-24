@@ -1,0 +1,33 @@
+{
+  "id": "lead-14-edtech",
+  "class": "lead",
+  "note": "EdTech lead that proposes a concrete meeting — mentions_meeting territory.",
+  "email": {
+    "message_id": "lead-14-edtech",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Rachel Kim",
+      "email": "rachel@brightpath-learning.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Following up from EdTech Asia — demo this Thursday?",
+    "body_text": "Hi!\n\nGreat meeting you at EdTech Asia last week. As promised, I'd love to set up a demo of how BrightPath Learning could use your research agent for our school-district sales team. Does Thursday 2pm ICT work? I'll send an invite.\n\nRachel",
+    "signature_block": "Rachel Kim | VP Sales | BrightPath Learning | brightpath-learning.example",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer",
+      "partner"
+    ],
+    "company_name": "BrightPath Learning",
+    "domain": "brightpath-learning.example",
+    "contact_name": "Rachel Kim"
+  }
+}

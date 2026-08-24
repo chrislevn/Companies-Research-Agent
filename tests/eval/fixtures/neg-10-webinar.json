@@ -1,0 +1,30 @@
+{
+  "id": "neg-10-webinar",
+  "class": "negative",
+  "note": "Mass webinar invite. A company is named, and it is still not a lead.",
+  "email": {
+    "message_id": "neg-10-webinar",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "TechSummit Asia",
+      "email": "events@techsummit-asia.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "[Webinar] 5 AI trends reshaping sales in 2027 — register free",
+    "body_text": "Join 5,000+ revenue leaders on Sept 12 for our free webinar on AI in sales.\n\nSpeakers from leading platforms. Register now — seats are limited!\n\nYou receive this because you attended TechSummit 2025.\nUnsubscribe: https://techsummit-asia.example/unsub",
+    "signature_block": "",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "newsletter",
+      "automated"
+    ]
+  }
+}

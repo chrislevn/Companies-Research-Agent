@@ -1,0 +1,35 @@
+{
+  "id": "lead-13-german-manufacturer",
+  "class": "lead",
+  "note": "German-language enquiry — the agent must not stumble on a third language.",
+  "email": {
+    "message_id": "lead-13-german-manufacturer",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Lukas Brandt",
+      "email": "l.brandt@mueller-praezision.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Anfrage: KI-gestützte Qualitätskontrolle",
+    "body_text": "Sehr geehrte Damen und Herren,\n\nwir sind ein mittelständischer Hersteller von Präzisionsteilen (Müller Präzisionstechnik GmbH, 240 Mitarbeiter, Stuttgart). Wir evaluieren derzeit Lösungen zur KI-gestützten Qualitätskontrolle in der Fertigung und würden gerne einen Termin für eine Produktvorstellung vereinbaren.\n\nMit freundlichen Grüßen\nLukas Brandt",
+    "signature_block": "Lukas Brandt | Einkauf | Müller Präzisionstechnik GmbH | mueller-praezision.example",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer"
+    ],
+    "company_name": [
+      "Müller Präzisionstechnik",
+      "Mueller Praezisionstechnik GmbH"
+    ],
+    "domain": "mueller-praezision.example",
+    "contact_name": "Lukas Brandt"
+  }
+}

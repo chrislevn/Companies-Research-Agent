@@ -76,6 +76,8 @@ class TriageAgent:
         if total:
             log.info("Triaging %d email(s) via %s", total, self.backend.describe())
 
+        flagged = _screen_with_guardrails(messages, say)
+
         results: list[TriageResult] = []
         started = time.monotonic()
         for start in range(0, total, self.batch_size):
@@ -88,15 +90,14 @@ class TriageAgent:
 
             # Name the emails *before* the call, not just after it. A local model
             # can sit silent for half a minute per batch, and "which one is it
-            # chewing on" is the first question during that wait.
+            # chewing on" is the first question during that wait. Named by a
+            # stable hash, not the address: INFO reaches places the mailbox must
+            # not — the web job pane mirrors it, a container deploy persists it —
+            # and "this sender again" survives hashing. -v (DEBUG) is the
+            # deliberate exception that prints the subject while debugging.
             for offset, message in enumerate(batch, start=first):
-                log.info(
-                    "  → [%d/%d] %s | %s",
-                    offset,
-                    total,
-                    message.sender.email or "unknown sender",
-                    _clip(message.subject),
-                )
+                log.info("  → [%d/%d] %s", offset, total, _who(message))
+                log.debug("      subject: %s", _clip(message.subject))
 
             from ..obs import metrics, tracing
 
@@ -115,6 +116,8 @@ class TriageAgent:
             )
             results.extend(batch_results)
 
+        if flagged:
+            results = _apply_guardrail_flags(messages, results, flagged)
         if total:
             log.info(
                 "Triage finished: %d email(s) in %.1fs via %s",
@@ -203,16 +206,23 @@ def _clip(text: str, limit: int = 60) -> str:
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
+def _who(message: EmailMessage) -> str:
+    """A sender token safe for INFO: stable hash, never the address or name."""
+    from ..obs.langfuse import pseudonym
+
+    raw = message.sender.email or message.sender.name
+    return f"sender {pseudonym(raw)}" if raw else "unknown sender"
+
+
 def _describe(message: EmailMessage, result: TriageResult) -> str:
     """One compact line per email, for the live log.
 
     Leads are marked so they stand out in a wall of newsletters, and the sender
-    always appears — it is what the reader recognises when checking the agent's
-    judgement against their own.
+    appears as the same hashed token as the pre-call line, so a verdict can be
+    matched to the message it answers without the address ever reaching INFO.
     """
     mark = "✓ lead" if result.should_research else "·"
-    who = message.sender.email or message.sender.name or "unknown sender"
-    bits = [f"{mark} {who} — {result.relationship.value}"]
+    bits = [f"{mark} {_who(message)} — {result.relationship.value}"]
     if result.company_name:
         bits.append(result.company_name)
     if result.mentions_meeting:
@@ -231,3 +241,51 @@ def _fallback(message: EmailMessage, reason: str) -> TriageResult:
         confidence=0.0,
         reasoning=f"Triage unavailable: {reason}",
     )
+
+
+def _screen_with_guardrails(
+    messages: Sequence[EmailMessage], say: Callable[[str], None]
+) -> set[str]:
+    """Message ids the NeMo input rail flags; empty when the rail is off."""
+    from . import rails
+
+    rail = rails.get_input_rail()
+    if rail is None or not messages:
+        return set()
+
+    say(f"Guardrails screening {len(messages)} message(s)")
+    flagged: set[str] = set()
+    for message in messages:
+        if rail.screen(f"{message.subject}\n\n{message.short_body(2000)}"):
+            flagged.add(message.message_id)
+            log.warning("  guardrails flagged %s", _who(message))
+            log.debug("      subject: %s", _clip(message.subject))
+    return flagged
+
+
+def _apply_guardrail_flags(
+    messages: Sequence[EmailMessage],
+    results: list[TriageResult],
+    flagged: set[str],
+) -> list[TriageResult]:
+    """Record every flag; in enforce mode, downgrade the verdict too."""
+    from ..config import SETTINGS
+    from ..obs import metrics
+
+    enforce = SETTINGS.guardrails_mode == "enforce"
+    out: list[TriageResult] = []
+    for message, result in zip(messages, results):
+        if message.message_id in flagged:
+            metrics.record_guardrails_flag("enforced" if enforce else "advisory")
+            if enforce:
+                result = TriageResult(
+                    message_id=message.message_id,
+                    is_business_contact=False,
+                    relationship=Relationship.UNKNOWN,
+                    should_research=False,
+                    confidence=0.0,
+                    reasoning="NeMo Guardrails flagged possible prompt "
+                              "injection (GUARDRAILS_MODE=enforce)",
+                )
+        out.append(result)
+    return out

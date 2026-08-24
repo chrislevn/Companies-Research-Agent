@@ -37,10 +37,12 @@ GOOGLE_SCOPES = [
 # `brief:deliver` is deliberately absent from the default: nothing leaves this
 # machine until a human turns that on.
 ALL_TOOL_SCOPES = frozenset(
-    {"research:read", "mail:read", "calendar:read", "memory:write", "brief:deliver"}
+    {"research:read", "mail:read", "calendar:read", "memory:read", "memory:write",
+     "drive:read", "brief:deliver"}
 )
 DEFAULT_TOOL_SCOPES = frozenset(
-    {"research:read", "mail:read", "calendar:read", "memory:write"}
+    {"research:read", "mail:read", "calendar:read", "memory:read", "memory:write",
+     "drive:read"}
 )
 
 
@@ -122,19 +124,44 @@ class Settings:
     google_credentials_file: Path
     google_token_file: Path
     db_path: Path
+    # Google Drive for the chat command. Default is the operator's own account
+    # through the installed-app OAuth flow, with a Drive-only token so the
+    # Gmail token keeps its scopes untouched. A service-account file is the
+    # headless alternative (share a folder with its address); configuring one
+    # is the opt-in, so it wins when the file exists.
+    google_service_account_file: Path = ROOT / "credentials" / "service_account.json"
+    drive_folder_id: str = ""
+    # Embeddings for long-term memory always run on Ollama: memory content is
+    # whatever the user asked to remember, so it stays on this machine.
+    ollama_embed_model: str = "nomic-embed-text"
     triage_backend: str = "anthropic"
     triage_batch_size: int = 10
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen3:8b"
     ollama_num_ctx: int = 16384
     ollama_timeout: float = 600.0
+    # vLLM: the other self-hosted option, for when there is a real GPU. Speaks
+    # the OpenAI-compatible API, so the base URL ends in /v1.
+    vllm_base_url: str = "http://localhost:8000/v1"
+    vllm_model: str = "Qwen/Qwen3-8B"
+    vllm_api_key: str = ""
+    vllm_timeout: float = 600.0
+    # NVIDIA NeMo Guardrails as an extra input rail in front of triage.
+    # On by default in advisory mode: screening runs on the local Ollama model
+    # (free, nothing leaves the machine) and fails open with one warning when
+    # NeMo or Ollama is absent — so the default costs nothing on machines that
+    # cannot run it. The deterministic tool gates remain the load-bearing wall.
+    # "advisory" records what it would have done; "enforce" downgrades flagged
+    # mail to skip.
+    guardrails_enabled: bool = True
+    guardrails_mode: str = "advisory"
     research_enabled: bool = True
     research_provider: str = "claude_web"
     research_model: str = "claude-opus-5"
     research_effort: str = "medium"
     research_max_searches: int = 8
     research_max_companies: int = 10
-    research_ttl_days: int = 14
+    research_ttl_days: int = 30
     calendar_enabled: bool = True
     calendar_provider: str = "google"
     calendar_lookahead_days: int = 30
@@ -156,6 +183,13 @@ class Settings:
     # verdict counts) answers most operational questions and carries none of
     # that, so it is what you get unless you deliberately ask for more.
     langfuse_capture_content: bool = False
+    # Serve prompts *from* Langfuse prompt management instead of the built-ins.
+    # Opt-in and it degrades: any fetch problem falls back to the file / the
+    # built-in, so a down Langfuse can never stop a scan. The label is which
+    # deployment channel this process follows — move the label in the Langfuse
+    # UI to roll a prompt forward or back without touching this machine.
+    langfuse_prompts_enabled: bool = False
+    langfuse_prompt_label: str = "production"
     prompts_dir: Path = ROOT / "prompts"
     org_profile_file: Path = ROOT / "profile.json"
     # Empty by default: the server answers only to localhost names. Set when
@@ -195,8 +229,23 @@ class Settings:
 
     @property
     def is_local_triage(self) -> bool:
-        """True when no message body leaves this machine for triage."""
-        return self.triage_backend.strip().lower() == "ollama"
+        """True when no message body goes to a hosted API for triage.
+
+        "Local" means a server you run — Ollama on this machine, or a vLLM
+        server whose address you chose. Either way, mail only goes where you
+        pointed it.
+        """
+        return self.triage_backend.strip().lower() in ("ollama", "vllm")
+
+    @property
+    def active_triage_model(self) -> str:
+        """The model the next scan will actually run, whichever backend is live."""
+        backend = self.triage_backend.strip().lower()
+        if backend == "ollama":
+            return self.ollama_model
+        if backend == "vllm":
+            return self.vllm_model
+        return self.triage_model
 
 
 def load_settings() -> Settings:
@@ -208,13 +257,21 @@ def load_settings() -> Settings:
         triage_backend=backend,
         # Ten emails at once is comfortable for a frontier model and too much for
         # a small local one, so the default follows the backend.
-        triage_batch_size=_int("TRIAGE_BATCH_SIZE", 4 if backend == "ollama" else 10),
+        triage_batch_size=_int(
+            "TRIAGE_BATCH_SIZE", 4 if backend in ("ollama", "vllm") else 10
+        ),
         ollama_host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
         ollama_model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
         # A batch of emails plus the schema overruns Ollama's small default
         # context, and the overflow is silently dropped rather than reported.
         ollama_num_ctx=_int("OLLAMA_NUM_CTX", 16384),
         ollama_timeout=_float("OLLAMA_TIMEOUT", 600.0),
+        vllm_base_url=os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1"),
+        vllm_model=os.getenv("VLLM_MODEL", "Qwen/Qwen3-8B"),
+        vllm_api_key=os.getenv("VLLM_API_KEY", ""),
+        vllm_timeout=_float("VLLM_TIMEOUT", 600.0),
+        guardrails_enabled=_bool("GUARDRAILS_ENABLED", True),
+        guardrails_mode=os.getenv("GUARDRAILS_MODE", "advisory").strip().lower(),
         research_enabled=_bool("RESEARCH_ENABLED", True),
         research_provider=os.getenv("RESEARCH_PROVIDER", "claude_web"),
         research_model=os.getenv("RESEARCH_MODEL", "claude-opus-5"),
@@ -225,7 +282,9 @@ def load_settings() -> Settings:
         # A scan that surfaces thirty leads should not quietly research thirty
         # companies. The rest wait for the next run.
         research_max_companies=_int("RESEARCH_MAX_COMPANIES", 10),
-        research_ttl_days=_int("RESEARCH_TTL_DAYS", 14),
+        # A company researched within the last month is served from cache and
+        # never recomputed — the only Claude API spend is genuinely new research.
+        research_ttl_days=_int("RESEARCH_TTL_DAYS", 30),
         calendar_enabled=_bool("CALENDAR_ENABLED", True),
         calendar_provider=os.getenv("CALENDAR_PROVIDER", "google"),
         # A month is far enough ahead to be worth preparing for and short enough
@@ -252,6 +311,8 @@ def load_settings() -> Settings:
         langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY", ""),
         langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY", ""),
         langfuse_capture_content=_bool("LANGFUSE_CAPTURE_CONTENT", False),
+        langfuse_prompts_enabled=_bool("LANGFUSE_PROMPTS_ENABLED", False),
+        langfuse_prompt_label=os.getenv("LANGFUSE_PROMPT_LABEL", "production").strip(),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
         org_profile_file=_path("ORG_PROFILE_FILE", "profile.json"),
         public_hosts=_csv("PUBLIC_HOSTS"),
@@ -261,6 +322,11 @@ def load_settings() -> Settings:
         allowed_recipients=_csv("ALLOWED_RECIPIENTS"),
         google_credentials_file=_path("GOOGLE_CREDENTIALS_FILE", "credentials/client_secret.json"),
         google_token_file=_path("GOOGLE_TOKEN_FILE", "credentials/token.json"),
+        google_service_account_file=_path(
+            "GOOGLE_SERVICE_ACCOUNT_FILE", "credentials/service_account.json"
+        ),
+        drive_folder_id=os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip(),
+        ollama_embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         db_path=_path("DB_PATH", "data/agent.db"),
         watch_enabled=_bool("WATCH_ENABLED", True),
         watch_interval_minutes=_int("WATCH_INTERVAL_MINUTES", 5),
@@ -296,6 +362,16 @@ SETTINGS: Settings = _LiveSettings()  # type: ignore[assignment]
 def reload_settings() -> None:
     """Re-read .env and update :data:`SETTINGS` in place."""
     load_dotenv(ENV_FILE, override=True)
+    SETTINGS._refresh()  # type: ignore[attr-defined]
+
+
+def refresh_settings_from_env() -> None:
+    """Recompute :data:`SETTINGS` from the process environment, skipping .env.
+
+    For values set by the process itself — the chat demo's ``--role`` flag
+    writes ``TOOL_SCOPES`` into the environment, and a .env re-read with
+    ``override=True`` would clobber exactly that.
+    """
     SETTINGS._refresh()  # type: ignore[attr-defined]
 
 

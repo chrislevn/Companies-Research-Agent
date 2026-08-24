@@ -39,7 +39,7 @@ from ..accounts import AccountsError
 from ..config import ALL_TOOL_SCOPES, SETTINGS, set_env_values
 from ..pipeline import seed_known_senders, start_watching
 from ..store import Store
-from . import mailboxes
+from . import auth, mailboxes
 from .jobs import RUNNER, JobBusy, friendly_error
 from .watcher import WATCHER, check_now
 
@@ -220,6 +220,22 @@ def _ollama_reachable() -> bool:
 
     try:
         return httpx.get(f"{SETTINGS.ollama_host.rstrip('/')}/api/tags", timeout=1.0).is_success
+    except Exception:
+        return False
+
+
+def _vllm_reachable() -> bool:
+    """Same question for a vLLM server, via its OpenAI-compatible /models."""
+    import httpx
+
+    headers = (
+        {"Authorization": f"Bearer {SETTINGS.vllm_api_key}"}
+        if SETTINGS.vllm_api_key else {}
+    )
+    try:
+        return httpx.get(
+            f"{SETTINGS.vllm_base_url.rstrip('/')}/models", headers=headers, timeout=1.0
+        ).is_success
     except Exception:
         return False
 
@@ -439,9 +455,7 @@ def state() -> dict:
         # the settings screen binds a model picker to it.
         "triage": {
             "backend": SETTINGS.triage_backend,
-            "model": (
-                SETTINGS.ollama_model if SETTINGS.is_local_triage else SETTINGS.triage_model
-            ),
+            "model": SETTINGS.active_triage_model,
             "local": SETTINGS.is_local_triage,
             "batch_size": SETTINGS.triage_batch_size,
         },
@@ -467,6 +481,8 @@ def state() -> dict:
             "triage_backend": SETTINGS.triage_backend,
             "ollama_model": SETTINGS.ollama_model,
             "ollama_host": SETTINGS.ollama_host,
+            "vllm_model": SETTINGS.vllm_model,
+            "vllm_base_url": SETTINGS.vllm_base_url,
             "research_enabled": SETTINGS.research_enabled,
             "research_effort": SETTINGS.research_effort,
             "research_max_searches": SETTINGS.research_max_searches,
@@ -480,6 +496,7 @@ def state() -> dict:
             "tool_scopes": sorted(SETTINGS.tool_scopes),
             "all_tool_scopes": sorted(ALL_TOOL_SCOPES),
             "ollama_reachable": _ollama_reachable(),
+            "vllm_reachable": _vllm_reachable(),
         },
         "watcher_running": WATCHER.running,
         "job": job.as_dict() if job else None,
@@ -846,8 +863,22 @@ def check_mailbox(account_id: str) -> dict:
 # --- settings --------------------------------------------------------------
 
 
+def _require_owner(request: Request) -> None:
+    """Settings, the API key and purge stay with the account that claimed the
+    instance. Every session may read and run; only the operator reconfigures —
+    otherwise a SIGNUP_OPEN demo visitor could grant delivery to themselves,
+    repoint the triage backend at a host they control, or erase the data.
+    """
+    user = getattr(request.state, "user", None)
+    if user is None or not auth.is_owner(user):
+        raise HTTPException(
+            403, "Only the account that claimed this instance can change this."
+        )
+
+
 @app.post("/api/anthropic")
-def set_anthropic(payload: dict = Body(...)) -> dict:
+def set_anthropic(request: Request, payload: dict = Body(...)) -> dict:
+    _require_owner(request)
     key = str(payload.get("api_key", "")).strip()
     if not key:
         raise HTTPException(400, "Paste your Claude API key.")
@@ -864,7 +895,8 @@ def set_anthropic(payload: dict = Body(...)) -> dict:
 
 
 @app.post("/api/settings")
-def update_settings(payload: dict = Body(...)) -> dict:
+def update_settings(request: Request, payload: dict = Body(...)) -> dict:
+    _require_owner(request)
     values: dict[str, str | None] = {}
     if "ignored_domains" in payload:
         raw = payload["ignored_domains"]
@@ -884,13 +916,19 @@ def update_settings(payload: dict = Body(...)) -> dict:
     # --- where triage runs ---
     if "triage_backend" in payload:
         backend = str(payload["triage_backend"]).strip().lower()
-        if backend not in ("anthropic", "ollama"):
-            raise HTTPException(400, "Triage runs either on the Claude API or on Ollama.")
+        if backend not in ("anthropic", "ollama", "vllm"):
+            raise HTTPException(
+                400, "Triage runs on the Claude API, on Ollama, or on a vLLM server."
+            )
         values["TRIAGE_BACKEND"] = backend
     if "ollama_model" in payload:
         values["OLLAMA_MODEL"] = str(payload["ollama_model"]).strip()
     if "ollama_host" in payload:
         values["OLLAMA_HOST"] = str(payload["ollama_host"]).strip()
+    if "vllm_model" in payload:
+        values["VLLM_MODEL"] = str(payload["vllm_model"]).strip()
+    if "vllm_base_url" in payload:
+        values["VLLM_BASE_URL"] = str(payload["vllm_base_url"]).strip()
 
     # --- research ---
     if "research_enabled" in payload:
@@ -955,7 +993,8 @@ def update_settings(payload: dict = Body(...)) -> dict:
 
 
 @app.post("/api/purge")
-def purge() -> dict:
+def purge(request: Request) -> dict:
+    _require_owner(request)
     removed = Store().purge_user("default")
     return {"removed": removed}
 

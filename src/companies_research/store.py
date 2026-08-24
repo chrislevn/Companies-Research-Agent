@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 # retrying it, and no longer — the cause is usually transient.
 FAILED_RESEARCH_TTL = timedelta(hours=6)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS known_senders (
@@ -118,6 +118,23 @@ CREATE INDEX IF NOT EXISTS idx_briefs_domain ON briefs(domain);
 
 CREATE INDEX IF NOT EXISTS idx_tool_calls_ts ON tool_calls(ts);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(tool, denied_at);
+
+-- Long-term memory for the chat agent, stored as RAG rows: the text and its
+-- embedding side by side. Unlike every other table this one stores content on
+-- purpose — remembering is its job. The embedding is a JSON float array;
+-- cosine search happens in Python, which at demo scale beats running a vector
+-- database for the same answer.
+CREATE TABLE IF NOT EXISTS memories (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL DEFAULT 'default',
+    category     TEXT NOT NULL DEFAULT 'general',
+    source       TEXT NOT NULL DEFAULT '',
+    chunk_index  INTEGER NOT NULL DEFAULT 0,
+    text         TEXT NOT NULL,
+    embedding    TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id, created_at);
 """
 
 
@@ -149,8 +166,9 @@ class Store:
     def _migrate(self, conn: sqlite3.Connection) -> None:
         """v1 (single-user, Gmail-only) → v2 (multi-user, multi-provider).
 
-        v2 → v3 adds ``company_research``, v3 → v4 adds ``tool_calls`` and
-        v4 → v5 adds ``briefs``. All three are pure additions, which the ``CREATE TABLE IF NOT EXISTS`` statements
+        v2 → v3 adds ``company_research``, v3 → v4 adds ``tool_calls``,
+        v4 → v5 adds ``briefs`` and v5 → v6 adds ``memories``. All four are
+        pure additions, which the ``CREATE TABLE IF NOT EXISTS`` statements
         in :data:`SCHEMA` handle on their own — no data to move, so this returns
         early for a v2-or-later database and lets SCHEMA do the work.
         """
@@ -408,6 +426,98 @@ class Store:
                 record["gate_results"] = {}
             out.append(record)
         return out
+
+    # ---------- memories ----------
+
+    def add_memory(self, *, text: str, embedding: list[float], category: str = "general",
+                   source: str = "", chunk_index: int = 0, user_id: str = "default") -> str:
+        memory_id = uuid.uuid4().hex[:16]
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO memories
+                    (id, user_id, category, source, chunk_index, text, embedding, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (memory_id, user_id, category, source, chunk_index, text,
+                 json.dumps(embedding), _now()),
+            )
+        return memory_id
+
+    def iter_memories(self, *, user_id: str = "default") -> list[dict]:
+        """Every memory with its vector, for in-process similarity search."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM memories WHERE user_id = ? ORDER BY created_at",
+                (user_id,),
+            ).fetchall()
+        out = []
+        for row in rows:
+            record = dict(row)
+            try:
+                record["embedding"] = json.loads(row["embedding"])
+            except (TypeError, ValueError):
+                continue  # an unreadable vector cannot be searched; skip the row
+            out.append(record)
+        return out
+
+    def replace_memories_for_source(self, source: str, *, user_id: str = "default") -> int:
+        """Drop every memory row from one source, ahead of re-indexing it.
+
+        Re-indexing a brief that already has rows would otherwise answer every
+        recall twice; replacing by source keeps indexing idempotent.
+        """
+        if not source:
+            return 0
+        with self._connect() as conn:
+            return conn.execute(
+                "DELETE FROM memories WHERE user_id = ? AND source = ?",
+                (user_id, source),
+            ).rowcount
+
+    def iter_research(self, *, limit: int = 500) -> list[dict]:
+        """Successful research rows with parsed profiles, for indexing."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT domain, company_name, researched_at, profile_json
+                FROM company_research WHERE ok = 1 AND profile_json IS NOT NULL
+                ORDER BY researched_at DESC LIMIT ?
+                """,
+                (max(limit, 1),),
+            ).fetchall()
+        out = []
+        for row in rows:
+            record = dict(row)
+            try:
+                record["profile"] = json.loads(row["profile_json"])
+            except (TypeError, ValueError):
+                continue
+            record.pop("profile_json", None)
+            out.append(record)
+        return out
+
+    def list_memories(self, *, user_id: str = "default", limit: int = 200) -> list[dict]:
+        """Memories without vectors, newest first — for showing, not searching."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, user_id, category, source, chunk_index, text, created_at
+                FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+                """,
+                (user_id, max(limit, 1)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def memory_count(self, user_id: str | None = None) -> int:
+        with self._connect() as conn:
+            if user_id is None:
+                row = conn.execute("SELECT COUNT(*) FROM memories").fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM memories WHERE user_id = ?", (user_id,)
+                ).fetchone()
+        return int(row[0])
 
     # ---------- briefs ----------
 
@@ -702,16 +812,109 @@ class Store:
         return leads
 
     def purge_user(self, user_id: str) -> int:
-        """Delete everything for one user — the GDPR/PDPA erasure path."""
+        """Delete everything derived from one user's mail — the erasure path.
+
+        Attribution first, deletion second: briefs and cached research carry no
+        ``user_id`` column, so what belongs to this user is worked out from the
+        rows that do — their processed messages name the briefs (``lead_id`` is
+        ``domain:message_id``) and their known senders name the researched
+        domains. Where a row cannot be attributed at all (a brief with no lead,
+        a shared research entry for a domain this user's senders wrote from),
+        erasure wins over precision and the row goes: over-deleting a cache
+        that rebuilds itself is a cost; under-deleting personal data is a lie
+        in the README.
+
+        Delivered brief files in the delivery directory are removed by domain
+        slug for the same reason. What this deliberately does not touch: the
+        web login accounts in ``accounts.db`` (credentials, not mail-derived —
+        deleted from the interface) and ``agent_state`` (scan timestamps only).
+        """
         with self._connect() as conn:
+            message_ids = {
+                row["message_id"]
+                for row in conn.execute(
+                    "SELECT message_id FROM processed_messages WHERE user_id = ?",
+                    (user_id,),
+                )
+                if row["message_id"]
+            }
+            domains = {
+                row["domain"]
+                for row in conn.execute(
+                    "SELECT domain FROM known_senders WHERE user_id = ?", (user_id,)
+                )
+                if row["domain"]
+            }
+
+            brief_domains, brief_ids = set(), []
+            for row in conn.execute("SELECT id, lead_id, domain FROM briefs"):
+                _, _, lead_message = (row["lead_id"] or "").rpartition(":")
+                attributed = (
+                    lead_message in message_ids
+                    or row["domain"] in domains
+                    or not row["lead_id"]
+                )
+                if attributed:
+                    brief_ids.append(row["id"])
+                    if row["domain"]:
+                        brief_domains.add(row["domain"])
+
             senders = conn.execute(
                 "DELETE FROM known_senders WHERE user_id = ?", (user_id,)
             ).rowcount
             messages = conn.execute(
                 "DELETE FROM processed_messages WHERE user_id = ?", (user_id,)
             ).rowcount
-        log.info("Purged user %s: %d senders, %d messages", user_id, senders, messages)
-        return senders + messages
+            memories = conn.execute(
+                "DELETE FROM memories WHERE user_id = ?", (user_id,)
+            ).rowcount
+            briefs = 0
+            for brief_id in brief_ids:
+                briefs += conn.execute(
+                    "DELETE FROM briefs WHERE id = ?", (brief_id,)
+                ).rowcount
+            research = 0
+            for domain in domains | brief_domains:
+                research += conn.execute(
+                    "DELETE FROM company_research WHERE domain = ?", (domain,)
+                ).rowcount
+            # The audit trail keeps its shape — timestamps, tools, gate results
+            # stay, because "what ran" is not personal data. The free-text error
+            # column is the one field a provider exception can smuggle an
+            # address into, so it alone is scrubbed.
+            errors = conn.execute(
+                "UPDATE tool_calls SET error = '[purged]' WHERE error != ''"
+            ).rowcount
+
+        files = self._purge_brief_files(domains | brief_domains)
+        log.info(
+            "Purged user %s: %d senders, %d messages, %d memories, %d briefs, "
+            "%d research rows, %d delivered files, %d tool-call errors scrubbed",
+            user_id, senders, messages, memories, briefs, research, files, errors,
+        )
+        return senders + messages + memories + briefs + research + files
+
+    @staticmethod
+    def _purge_brief_files(domains: set[str]) -> int:
+        """Remove delivered briefs for the purged domains from the delivery dir."""
+        from .delivery.file import _slug
+
+        directory = SETTINGS.delivery_dir
+        if not directory.is_dir() or not domains:
+            return 0
+        slugs = {_slug(d) for d in domains if d}
+        removed = 0
+        for path in directory.glob("*.md"):
+            # Filenames are "<date>-<time>-<slug>.md"; compare the whole slug,
+            # not a substring, so purging "acme.io" never takes "acme.io.vn".
+            stem_slug = path.stem.split("-", 2)[-1] if path.stem.count("-") >= 2 else ""
+            if stem_slug in slugs:
+                try:
+                    path.unlink()
+                    removed += 1
+                except OSError:
+                    log.warning("Could not remove delivered brief %s", path)
+        return removed
 
     def purge_older_than(self, cutoff: datetime) -> int:
         """Retention policy: drop processed-message records past their window."""

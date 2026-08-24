@@ -118,8 +118,53 @@ def prompt_path(name: str) -> Path:
     return SETTINGS.prompts_dir / f"{name}.md"
 
 
+def _from_langfuse(name: str) -> Prompt | None:
+    """The prompt Langfuse serves for ``name``, or None to fall through.
+
+    Opt-in via LANGFUSE_PROMPTS_ENABLED. The label (default "production") is
+    the deployment channel: `langfuse sync` versions the built-ins there, and
+    moving the label in the Langfuse UI rolls a prompt forward or back with no
+    deploy. Any failure — server down, prompt missing, package absent — is a
+    debug line and a fall-through, because a prompt registry that can stop a
+    scan is worse than no registry. The SDK caches fetches, so this is not a
+    network call per email.
+    """
+    if not (SETTINGS.langfuse_prompts_enabled and SETTINGS.langfuse_enabled):
+        return None
+    try:
+        from .obs import langfuse as obs_lf
+
+        if not obs_lf.setup():
+            return None
+        from langfuse import get_client
+
+        fetched = get_client().get_prompt(
+            name, label=SETTINGS.langfuse_prompt_label, max_retries=1,
+            fetch_timeout_seconds=5,
+        )
+        text = (fetched.prompt or "").strip()
+        if not text:
+            return None
+        source = (f"langfuse:{name}@{SETTINGS.langfuse_prompt_label} "
+                  f"(v{fetched.version})")
+        return Prompt(text=scrub_credentials(text, where=source), source=source)
+    except Exception:
+        log.debug("Langfuse prompt %r unavailable; falling back", name,
+                  exc_info=True)
+        return None
+
+
 def load(name: str, default: str) -> Prompt:
     """The prompt to use for ``name``, falling back to ``default``."""
+    served = _from_langfuse(name)
+    if served is not None:
+        extra = (os.getenv(f"{name.upper()}_PROMPT_EXTRA") or "").strip()
+        if extra:
+            extra = scrub_credentials(extra, where=f"{name.upper()}_PROMPT_EXTRA")
+            return Prompt(text=f"{served.text}\n\n{extra}",
+                          source=served.source, extra=extra)
+        return served
+
     text, source = default, "built-in"
 
     path = prompt_path(name)

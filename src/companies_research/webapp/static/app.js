@@ -953,15 +953,22 @@ async function savePrompt(button, { reset = false } = {}) {
 
 function renderSystemConfig() {
   const s = STATE.settings;
-  const local = s.triage_backend === "ollama";
-  $("#backend-anthropic").checked = !local;
-  $("#backend-ollama").checked = local;
-  $("#ollama-fields").hidden = !local;
+  const backend = s.triage_backend || "anthropic";
+  $("#backend-anthropic").checked = backend === "anthropic";
+  $("#backend-ollama").checked = backend === "ollama";
+  $("#backend-vllm").checked = backend === "vllm";
+  $("#ollama-fields").hidden = backend !== "ollama";
   $("#ollama-model").value = s.ollama_model || "";
   $("#ollama-host").value = s.ollama_host || "";
   $("#ollama-status").textContent = s.ollama_reachable
     ? t("cfg.ollama.found") : t("cfg.ollama.missing");
   $("#ollama-status").className = "muted small " + (s.ollama_reachable ? "ok" : "warn-text");
+  $("#vllm-fields").hidden = backend !== "vllm";
+  $("#vllm-model").value = s.vllm_model || "";
+  $("#vllm-base-url").value = s.vllm_base_url || "";
+  $("#vllm-status").textContent = s.vllm_reachable
+    ? t("cfg.vllm.found") : t("cfg.vllm.missing");
+  $("#vllm-status").className = "muted small " + (s.vllm_reachable ? "ok" : "warn-text");
 
   $("#research-enabled").checked = s.research_enabled;
   $("#research-effort").value = s.research_effort || "medium";
@@ -1148,6 +1155,7 @@ function wire() {
   $$('input[name="backend"]').forEach((radio) => {
     radio.onchange = async () => {
       $("#ollama-fields").hidden = radio.value !== "ollama";
+      $("#vllm-fields").hidden = radio.value !== "vllm";
       if (radio.value === STATE.settings.triage_backend) return;   // nothing chosen
       await post("/api/settings", { triage_backend: radio.value });
       await refresh();
@@ -1159,6 +1167,8 @@ function wire() {
   const auto = {
     "#ollama-model": (v) => ({ ollama_model: v }),
     "#ollama-host": (v) => ({ ollama_host: v }),
+    "#vllm-model": (v) => ({ vllm_model: v }),
+    "#vllm-base-url": (v) => ({ vllm_base_url: v }),
     "#research-enabled": (_, el) => ({ research_enabled: el.checked }),
     "#research-effort": (v) => ({ research_effort: v }),
     "#research-searches": (v) => ({ research_max_searches: Number(v) }),

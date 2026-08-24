@@ -52,9 +52,12 @@ API call needs both the page token and a logged-in session. Two consequences:
    `SIGNUP_OPEN=true`. So sign up first, and the login wall does the rest.
    Turn `SIGNUP_OPEN` on only when you want visitors creating accounts — for
    instance while graders exercise the account-creation flow — and know what
-   it means: **anyone who can sign up sees what the agent has read.** For that
-   window, demo against a mailbox you are comfortable showing, and turn it
-   back off after (see the checklist at the bottom).
+   it means: **anyone who can sign up sees what the agent has read and can run
+   scans and research against your mailbox.** What visitors cannot do is
+   reconfigure or erase: settings, the API key and purge answer only to the
+   first account — the one that claimed the instance. For that window, demo
+   against a mailbox you are comfortable showing, and turn signup back off
+   after (see the checklist at the bottom).
 
 And one behaviour to expect: **setting `PUBLIC_HOSTS` turns Sign in with
 Google off entirely** — the button hides and its endpoints answer 404, for
@@ -159,8 +162,14 @@ Two caveats specific to headless servers:
   UI (works headless, and is the path the setup screen recommends anyway), or
   run `./start.sh auth` on your laptop once and copy `credentials/` to the
   droplet.
-- **Ollama triage** would need an Ollama on the droplet; 1 GB of RAM will not
-  run one. Leave `TRIAGE_BACKEND=anthropic` on a small VPS.
+- **Self-hosted triage does not fit a $6 droplet.** Ollama would need to run on
+  the droplet itself and 1 GB of RAM will not hold a model; vLLM needs a GPU the
+  droplet does not have. Leave `TRIAGE_BACKEND=anthropic` on a small VPS — or,
+  if you do own a GPU box, set `TRIAGE_BACKEND=vllm` and point `VLLM_BASE_URL`
+  at it **over a private network** (WireGuard/Tailscale between the droplet and
+  the GPU machine). Message bodies travel to whatever that URL names, so never
+  point it across the public internet — and if the server must listen beyond
+  loopback, start it with `--api-key` and set `VLLM_API_KEY` to match.
 - **Keep it one process.** The container runs a single uvicorn worker, and
   the first-account claim is serialised in-process on that assumption.
   Don't add `--workers N` — if this ever needs to scale past one process,
@@ -192,8 +201,11 @@ Four independent checks, in the order a request meets them
    unless `SIGNUP_OPEN=true`.
 
 And below all of that, the tool harness is unchanged: `brief:deliver` stays
-off unless granted, recipients stay allowlisted, and no visitor setting can
-widen either from the browser without those gates agreeing.
+off unless granted and recipients stay allowlisted. The settings endpoints
+that *could* widen those gates — scopes, recipients, backends, the API key,
+purge — refuse every account except the first one, the account that claimed
+the instance. A visitor admitted during a `SIGNUP_OPEN` window can look and
+run; they cannot reconfigure what the agent is allowed to do.
 
 ## Pre-demo checklist
 

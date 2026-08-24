@@ -475,6 +475,25 @@
       </div>
       <p class="muted small" id="ollama-status"></p>
     </div>
+    <label class="radio">
+      <input type="radio" name="backend" value="vllm" id="backend-vllm">
+      <span><strong data-i18n="cfg.triage.vllm">A vLLM server you run</strong> —
+        <span class="muted" data-i18n="cfg.triage.vllm.note">for a GPU box. Fast; mail only goes where you point it.</span></span>
+    </label>
+    <div id="vllm-fields" class="indent" hidden>
+      <div class="two-col">
+        <label class="field">
+          <span data-i18n="cfg.vllm.model">Served model</span>
+          <input id="vllm-model" placeholder="Qwen/Qwen3-8B">
+          <small class="muted" data-i18n="cfg.vllm.note">Must match the model name vLLM was started with.</small>
+        </label>
+        <label class="field">
+          <span data-i18n="cfg.vllm.host">vLLM address</span>
+          <input id="vllm-base-url" placeholder="http://localhost:8000/v1">
+        </label>
+      </div>
+      <p class="muted small" id="vllm-status"></p>
+    </div>
   </article>
   <article class="card">
     <h2 data-i18n="cfg.research">Researching companies</h2>

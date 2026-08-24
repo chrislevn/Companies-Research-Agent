@@ -1,0 +1,31 @@
+{
+  "id": "neg-09-trial-expiry",
+  "class": "negative",
+  "note": "SaaS trial-expiry nag from a tool the owner already uses. Vendor noise, not a lead.",
+  "email": {
+    "message_id": "neg-09-trial-expiry",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Notion Team",
+      "email": "team@mail.notion-app.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Your trial ends in 3 days",
+    "body_text": "Hi there,\n\nYour Business trial ends in 3 days. Upgrade now to keep unlimited version history and admin tools for your workspace.\n\nUpgrade from $8/member/month.\n\n— The Notion team",
+    "signature_block": "",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": false,
+    "relationship": [
+      "automated",
+      "vendor",
+      "newsletter"
+    ]
+  }
+}

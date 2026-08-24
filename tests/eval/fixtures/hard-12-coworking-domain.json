@@ -1,0 +1,33 @@
+{
+  "id": "hard-12-coworking-domain",
+  "class": "hard",
+  "note": "Consultant on a shared coworking domain; the real company is only in the signature.",
+  "email": {
+    "message_id": "hard-12-coworking-domain",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Marco Silva",
+      "email": "marco.silva@hive-workspace.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Data pipeline consulting — intro",
+    "body_text": "Hi,\n\nI run Ferrovia Analytics, a three-person data consultancy (we hot-desk at Hive, hence the address). A mutual client suggested we talk about integrating your research feed into our lead-gen pipelines. Open to a call?\n\nMarco",
+    "signature_block": "Marco Silva | Founder | Ferrovia Analytics | (at Hive Workspace)",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "partner",
+      "vendor",
+      "customer"
+    ],
+    "company_name": "Ferrovia Analytics",
+    "contact_name": "Marco Silva"
+  }
+}

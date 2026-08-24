@@ -1,0 +1,36 @@
+{
+  "id": "lead-11-healthcare",
+  "class": "lead",
+  "note": "Hospital group evaluating an AI intake tool — plain lead in English.",
+  "email": {
+    "message_id": "lead-11-healthcare",
+    "provider": "gmail",
+    "account_id": "eval",
+    "sender": {
+      "name": "Dr. Amara Okafor",
+      "email": "amara.okafor@medcare-network.example"
+    },
+    "to": [
+      {
+        "email": "owner@example.com"
+      }
+    ],
+    "subject": "Patient intake automation — pilot enquiry",
+    "body_text": "Hello,\n\nI'm the digital transformation lead at MedCare Clinic Network (14 clinics, Lagos and Abuja). We are budgeting a pilot for AI-assisted patient intake in Q1 and your product was recommended by a partner hospital.\n\nCould you share pricing and a compliance overview (HIPAA-equivalent)?\n\nRegards,\nAmara",
+    "signature_block": "Dr. Amara Okafor | Digital Transformation | MedCare Clinic Network | medcare-network.example",
+    "received_at": "2026-08-20T09:00:00+00:00"
+  },
+  "expected": {
+    "should_research": true,
+    "relationship": [
+      "customer",
+      "partner"
+    ],
+    "company_name": "MedCare Clinic Network",
+    "domain": "medcare-network.example",
+    "contact_name": [
+      "Amara Okafor",
+      "Dr. Amara Okafor"
+    ]
+  }
+}

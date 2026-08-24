@@ -9,8 +9,8 @@
       "recall_at_1": 0.8333,
       "recall_at_3": 1.0,
       "mrr": 0.9167,
-      "embed_seconds": 1.18,
-      "query_latency_p50": 0.224,
+      "embed_seconds": 3.39,
+      "query_latency_p50": 0.213,
       "tokens": 2187,
       "cost_per_1000_docs": 0.0015,
       "misses": [
@@ -31,8 +31,8 @@
       "recall_at_1": 0.8095,
       "recall_at_3": 1.0,
       "mrr": 0.9008,
-      "embed_seconds": 0.84,
-      "query_latency_p50": 0.273,
+      "embed_seconds": 0.99,
+      "query_latency_p50": 0.287,
       "tokens": 2187,
       "cost_per_1000_docs": 0.0095,
       "misses": [
@@ -54,8 +54,8 @@
       "recall_at_1": 0.7857,
       "recall_at_3": 1.0,
       "mrr": 0.8849,
-      "embed_seconds": 0.33,
-      "query_latency_p50": 0.031,
+      "embed_seconds": 0.88,
+      "query_latency_p50": 0.034,
       "tokens": 2187,
       "cost_per_1000_docs": 0.0,
       "misses": [

@@ -13,3 +13,9 @@ scrape_configs:
       - targets: ["host.docker.internal:9464"]
         labels:
           service: companies-research-agent
+      # The eval lane: CLI runs (eval, compare, redteam, report-quality)
+      # started with METRICS_PORT=9465 report here, so experiments land on
+      # the same dashboards without fighting the long-running app for 9464.
+      - targets: ["host.docker.internal:9465"]
+        labels:
+          service: companies-research-eval

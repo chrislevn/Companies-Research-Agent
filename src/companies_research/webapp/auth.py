@@ -330,6 +330,22 @@ def close_session(token: str) -> None:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
 
 
+def is_owner(user: User) -> bool:
+    """Is this the account that claimed the instance?
+
+    The first account to sign up is the operator; anyone after them exists
+    because the operator opened SIGNUP_OPEN for a demo window. Accounts gate
+    entry, but settings, the API key and purge change what the *agent* does
+    with the operator's mailbox — those stay with the owner, so a demo visitor
+    can look around without being able to reconfigure or erase.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id FROM users ORDER BY created_at, rowid LIMIT 1"
+        ).fetchone()
+    return row is not None and row["id"] == user.id
+
+
 def _now() -> float:
     return time.time()
 

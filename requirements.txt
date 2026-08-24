@@ -7,6 +7,9 @@ python-dotenv>=1.0.1
 fastapi>=0.110.0
 uvicorn>=0.29.0
 
+# MCP server — the pipeline as tools for Claude and ChatGPT (see MCP.md)
+mcp>=1.2.0
+
 # Gmail / Google Workspace
 google-api-python-client>=2.130.0
 google-auth>=2.30.0
@@ -14,6 +17,10 @@ google-auth-oauthlib>=1.2.0
 
 # Microsoft 365 / Outlook (Graph)
 msal>=1.28.0
+
+# Google Drive files rendered as Markdown for the chat demo (PDF, DOCX, XLSX,
+# PPTX and the Google-native formats after export).
+markitdown[docx,pptx,xlsx,pdf]>=0.1.7
 
 # Generic IMAP uses the standard library (imaplib, email) — no extra dependency.
 
@@ -39,3 +46,11 @@ langfuse>=3.0.0
 # as Markdown and HTML if either is missing.
 fpdf2>=2.8.0
 python-docx>=1.1.0
+
+# Optional input rail in front of triage (GUARDRAILS_ENABLED). Heavy — it
+# brings langchain with it — and the agent runs identically without it:
+# agents/rails.py degrades to "unscreened, warned once" when absent.
+# fastembed is NeMo's default flow-index embedder; without it the engine
+# still builds but logs a traceback and may degrade at generate time.
+nemoguardrails>=0.17.0
+fastembed>=0.8.0
