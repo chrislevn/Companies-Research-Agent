@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from .build import build_brief
-from .render import to_html, to_markdown
+from .render import (DocxUnavailable, PdfUnavailable, to_docx, to_html,
+                     to_markdown, to_pdf)
 
-__all__ = ["build_brief", "to_html", "to_markdown", "generate", "deliver"]
+__all__ = ["build_brief", "to_html", "to_markdown", "to_pdf", "PdfUnavailable", "to_docx", "DocxUnavailable", "generate", "deliver"]
 
 
 def generate(*, domain: str, store=None, lead_id: str = "", refresh_calendar: bool = True):
