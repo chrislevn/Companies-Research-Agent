@@ -1,6 +1,6 @@
 """Send test emails to the monitored inbox, so `scan` has something to triage.
 
-Reads GMAIL_APP_PASSWORD, OLLAMA_HOST and OLLAMA_MODEL from the repo's .env —
+Reads GMAIL_APP_PASSWORD, OLLAMA_HOST and TESTMAIL_MODEL from the repo's .env —
 no secret lives in this file.
 
 Usage (from the repo root):
@@ -34,7 +34,9 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 ACCOUNT = "locvicvn1234@gmail.com"
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3-coder:latest")
+# A small fast model is plenty for writing a fake enquiry — this does NOT need
+# the heavy accuracy model the real pipeline uses. Override with TESTMAIL_MODEL.
+OLLAMA_MODEL = os.environ.get("TESTMAIL_MODEL", "llama3.2:3b")
 
 CANNED = {
     "fpt": (
@@ -114,6 +116,9 @@ def generate_with_ollama(kind: str) -> tuple[str, str]:
         "system": system,
         "stream": False,
         "format": "json",
+        # Keep the model resident for an hour so back-to-back runs never pay a
+        # cold-load again.
+        "keep_alive": "1h",
         "options": {"temperature": 1.0},
     }
     req = urllib.request.Request(

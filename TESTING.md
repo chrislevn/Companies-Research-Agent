@@ -37,21 +37,37 @@ Put `-v` after `./start.sh` on any command to watch the logs live
 
 ## 2. Web Research Agent + Company Info (DB cache)
 
-- `./start.sh -v research fpt.com` — profile + news + sources. Cached domains
-  return instantly with zero API calls; an uncached domain needs credit
+- Start with an **unprocessed** company, so the Web Research Agent actually
+  runs instead of the cache answering: `./start.sh -v research <domain>` with
+  a domain not in the DB yet (e.g. `agora.io`) — watch the live pass: profile
+  + news + sources (needs credit)
+- `./start.sh -v research` with no domain catches up on every scanned lead
+  that has not been researched yet (step 1's testmail company lands here if
+  its research failed during the scan)
 - Run the **same** command again → the log shows it served from the SQLite
   cache (this is the "Company Info Agent — lấy info từ DB" box)
+- `./start.sh -v research fpt.com` — already cached, so it returns instantly
+  with zero API calls even without credit; good as a cache-only fallback,
+  not as the web-research demo
 - Force a refresh inside the 30-day window (needs credit):
-  `./start.sh -v research fpt.com --force`
+  `./start.sh -v research <domain> --force`
 
 ## 3. Calendar Agent
 
-- `./start.sh -v calendar "FPT Software"` — upcoming meetings with that company
+- Pick the lead first — its **domain** is the ID everywhere: the scan output
+  prints `company : <name> (<domain>)` for each lead, or ask the agent
+  `./start.sh chat -m "list the leads"`, or read them off the `ui` dashboard
+- `./start.sh -v calendar <domain>` — upcoming meetings, matched on attendee
+  email domain; add `--name "Company Name"` for the weaker title match
+- Cached standby: `./start.sh -v calendar fpt.com --name "FPT Software"`
 
 ## 4. Report Generation Agent
 
-- `./start.sh -v brief "FPT Software"` — assembles the brief and saves it as a
-  draft in the review queue
+- `./start.sh -v brief <domain>` — same domain as step 3: assembles the brief
+  from what the store already holds (triage + research + calendar) and saves
+  it as a draft in the review queue
+- The lookup is by the lead's domain, not its display name —
+  `brief "FPT Software"` finds no lead; `brief fpt.com` is the cached standby
 
 ## 5. Human Approval Agent
 
@@ -62,10 +78,13 @@ Put `-v` after `./start.sh` on any command to watch the logs live
 
 ## 6. Memory Agent (survives restart)
 
-- `./start.sh chat -m "Hãy nhớ rằng tôi thích Python"` → `save_memory`
-- A **new** run: `./start.sh chat -m "Tôi thích ngôn ngữ gì?"` →
-  `search_memory` still answers after restart (memory is SQLite)
-- `./start.sh chat -m /index` — folds research + briefs into the memory corpus
+- Save a fact about the company from the flow, not a personal taste — e.g.
+  `./start.sh chat -m "Hãy nhớ rằng <company> đang cần chatbot AI cho đội CSKH, ngân sách khoảng 50k USD"`
+  → `save_memory`
+- A **new** run: `./start.sh chat -m "<company> đang cần gì và ngân sách bao nhiêu?"`
+  → `search_memory` still answers after restart (memory is SQLite)
+- `./start.sh chat -m /index` — folds research + briefs into the memory corpus,
+  so the agent can also answer from research it did earlier
 
 ## 7. Tool Harness — the six gates
 
@@ -130,16 +149,21 @@ Put `-v` after `./start.sh` on any command to watch the logs live
 ## Fast happy path (one sitting)
 
 ```
-testmail → scan --since 1h --include-known → research fpt.com →
-brief "FPT Software" → ui (approve) → tools --limit 30 → redteam → eval →
-Grafana stack → MCP
+testmail → scan --since 1h --include-known (note the lead's <domain>) →
+research → brief <domain> → ui (approve) → tools --limit 30 → redteam →
+eval → Grafana stack → MCP
 ```
+
+The scanned lead's domain carries through every step; fall back to `fpt.com`
+only when there is no credit for live research.
 
 ## The testmail command
 
-Sends a brand-new, LLM-generated email to your inbox each run (local model,
-`qwen3-coder:latest`). Defined as shell functions in `~/.zshrc`; the script is
-`scripts/send_test_email.py`.
+Sends a brand-new, LLM-generated email to your inbox each run. It uses the
+small fast `llama3.2:3b` model (NOT the heavy accuracy model the real pipeline
+uses) — a fake enquiry does not need accuracy, so generation is ~3-4 seconds.
+Override the model with `TESTMAIL_MODEL` if you want. Defined as shell
+functions in `~/.zshrc`; the script is `scripts/send_test_email.py`.
 
 - `testmail` — a new **lead** email
 - `testmail-neg` — a new **marketing/webinar** email (triage should reject it)
@@ -147,7 +171,7 @@ Sends a brand-new, LLM-generated email to your inbox each run (local model,
 - `testmail --canned fpt` — a fixed sample if Ollama is off
   (`--canned all` / `--canned list`)
 
-First run after the Mac has been idle may take ~1–2 min while the 18 GB model
-reloads; after that it is a few seconds. If Ollama is unreachable the script
-falls back to a fixed sample and says so. The Gmail app password lives only in
-the gitignored `.env`.
+The script pins the model in memory for an hour (`keep_alive`), so back-to-back
+runs never pay a cold load. Only the very first run after a reboot pays the
+~2-3s model load. If Ollama is unreachable the script falls back to a fixed
+sample and says so. The Gmail app password lives only in the gitignored `.env`.
