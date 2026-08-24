@@ -104,6 +104,7 @@ class ScanReport:
     skipped: list[SkippedMessage] = field(default_factory=list)
     triaged: list[tuple[EmailMessage, TriageResult]] = field(default_factory=list)
     researched: list[tuple[str, ResearchOutcome]] = field(default_factory=list)
+    indexed: int = 0  # research profiles folded into the knowledge base this run
     errors: list[AccountError] = field(default_factory=list)
     accounts_scanned: list[str] = field(default_factory=list)
 
@@ -123,6 +124,7 @@ class ScanReport:
         self.skipped.extend(other.skipped)
         self.triaged.extend(other.triaged)
         self.researched.extend(other.researched)
+        self.indexed += other.indexed
         self.errors.extend(other.errors)
         self.accounts_scanned.extend(other.accounts_scanned)
 
@@ -270,12 +272,24 @@ def scan(
     say(f"Saving {len(results)} result(s) — {leads} lead(s)")
 
     if research and leads:
-        research_leads(
+        outcomes = research_leads(
             [r for r in results if r.should_research],
             store=store,
             progress=say,
             report=report,
         )
+        # A researched profile lives in the research cache, but the knowledge
+        # base (what search_memory / the chat agent recall) only sees it once it
+        # is embedded. Fold each successful profile in now, so the company is
+        # answerable straight after the scan without a manual /index. Index the
+        # full outcome set — not just report.researched, which is fresh-only —
+        # so a company reused from cache that was never indexed (e.g. the
+        # embedder was down on the run that researched it) still gets in.
+        # Idempotent per source, so re-indexing an already-indexed cache hit is
+        # cheap. Non-fatal: research and triage already succeeded, so a dead
+        # embedder must not fail the scan — indexing just waits for the next run.
+        if not dry_run:
+            _index_researched(outcomes, report, store=store, progress=say)
 
     for (account, message), result in zip(candidates, results):
         report.triaged.append((message, result))
@@ -294,6 +308,55 @@ def scan(
             log.warning("store_write denied at %s — %s not recorded", exc.gate, message.uid)
 
     return report
+
+
+def _index_researched(
+    outcomes: dict[str, ResearchOutcome], report: ScanReport, *,
+    store: Store, progress: Callable[[str], None],
+) -> None:
+    """Embed this run's successful profiles into the knowledge base.
+
+    ``outcomes`` is the full domain→outcome map research_leads returned — both
+    freshly-researched and cache-reused. Idempotent per domain
+    (``index_research_domain`` replaces a source's rows), so re-indexing a cache
+    hit that was already indexed simply re-embeds to the same content. Wholly
+    non-fatal: a MemoryUnavailable (Ollama down) or any single-domain error is
+    logged and skipped, never raised — the scan's mail work has already
+    succeeded and must stand.
+    """
+    from . import memory
+
+    domains = [d for d, o in outcomes.items() if o.ok and o.profile is not None]
+    if not domains:
+        return
+    indexed = 0
+    for domain in domains:  # outcomes is already one entry per domain
+        try:
+            # Through the same gate as every other scan write: a revoked
+            # memory:write scope refuses here and is audited, so the knowledge
+            # base cannot be written behind the harness's back.
+            chunks = tools.store_write(
+                kind="knowledge", key=f"research:{domain}",
+                _write=lambda d=domain: memory.index_research_domain(d, store=store),
+            )
+            if chunks:
+                indexed += 1
+        except tools.ToolDenied as exc:
+            # Scope revoked mid-scan — stop trying, note it, let the scan stand.
+            log.warning("knowledge-base write denied at %s — not indexing", exc.gate)
+            progress("Knowledge base not updated (memory:write not granted)")
+            break
+        except memory.MemoryUnavailable as exc:
+            # The embedder is down for the whole run — one message, then stop
+            # trying rather than repeat it per domain.
+            log.info("knowledge base not updated (%s) — run `/index` later", exc)
+            progress("Knowledge base not updated (embedder unavailable)")
+            break
+        except Exception:
+            log.exception("indexing %s into the knowledge base failed", domain)
+    report.indexed += indexed
+    if indexed:
+        progress(f"Indexed {indexed} compan(y/ies) into the knowledge base")
 
 
 def _persist_triage(

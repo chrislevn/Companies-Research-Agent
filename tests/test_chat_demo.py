@@ -254,6 +254,149 @@ def test_purge_erases_memories_indexed_from_the_users_research(monkeypatch):
     assert store.memory_count() == 0
 
 
+# --- index_research_domain: one company into the knowledge base --------------
+
+
+def _save_research(store, domain, one_liner="a thing", *, ok=True):
+    from companies_research.models import CompanyProfile
+    from companies_research.research.base import ResearchOutcome
+
+    profile = None
+    if ok:
+        profile = CompanyProfile(name=domain.split(".")[0].title(), domain=domain,
+                                 confidence=0.9, one_liner=one_liner)
+    store.save_research(domain, profile, company_name=domain,
+                        error="" if ok else "no credit")
+    # ResearchOutcome.ok is derived from profile, so a None profile is a failure.
+    return ResearchOutcome(profile=profile, error="" if ok else "no credit")
+
+
+def test_index_research_domain_indexes_only_that_domain(monkeypatch):
+    from companies_research import memory
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    _save_research(store, "acme.io", "rocket-powered anvils")
+    _save_research(store, "globex.io", "spacetime widgets")
+
+    chunks = memory.index_research_domain("acme.io", store=store)
+    assert chunks >= 1
+    # Only acme is now recallable; globex was left un-indexed.
+    sources = {m["source"] for m in memory.recall("anvils widgets", top_k=10,
+                                                   store=store)["memories"]}
+    assert sources == {"research:acme.io"}
+
+
+def test_index_research_domain_is_idempotent(monkeypatch):
+    from companies_research import memory
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    _save_research(store, "acme.io", "anvils")
+    memory.index_research_domain("acme.io", store=store)
+    once = store.memory_count()
+    memory.index_research_domain("acme.io", store=store)
+    assert store.memory_count() == once
+
+
+def test_index_research_domain_no_ops_for_missing_or_failed_research(monkeypatch):
+    from companies_research import memory
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    _save_research(store, "acme.io", ok=False)  # cached failure, no profile
+    assert memory.index_research_domain("acme.io", store=store) == 0
+    assert memory.index_research_domain("never-seen.io", store=store) == 0
+    assert store.memory_count() == 0
+
+
+# --- scan folds fresh research into the knowledge base -----------------------
+
+
+def test_scan_indexes_researched_companies_into_the_knowledge_base(monkeypatch):
+    from companies_research import memory, pipeline
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    outcomes = {
+        "acme.io": _save_research(store, "acme.io", "rocket-powered anvils"),
+        "globex.io": _save_research(store, "globex.io", "spacetime widgets"),
+    }
+    report = pipeline.ScanReport()
+    pipeline._index_researched(outcomes, report, store=store, progress=lambda _m: None)
+
+    assert report.indexed == 2
+    # Both companies are now answerable through the same recall the chat uses.
+    found = memory.recall("anvils", top_k=1, store=store)["memories"]
+    assert found and found[0]["source"] == "research:acme.io"
+
+
+def test_scan_indexing_skips_failed_research(monkeypatch):
+    from companies_research import memory, pipeline
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    outcomes = {
+        "acme.io": _save_research(store, "acme.io", "anvils"),
+        "dead.io": _save_research(store, "dead.io", ok=False),  # no profile
+    }
+    report = pipeline.ScanReport()
+    pipeline._index_researched(outcomes, report, store=store, progress=lambda _m: None)
+    assert report.indexed == 1
+
+
+def test_scan_indexes_cache_reused_research_too(monkeypatch):
+    """A company reused from cache (an ok ResearchOutcome with a profile, but
+    absent from report.researched) must still reach the knowledge base — the
+    case where it was researched on an earlier run whose embedder was down."""
+    from companies_research import memory, pipeline
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    # Saved on a prior run but never indexed (memory_count starts at 0).
+    outcomes = {"acme.io": _save_research(store, "acme.io", "anvils")}
+    assert store.memory_count() == 0
+    report = pipeline.ScanReport()  # note: report.researched is empty
+    pipeline._index_researched(outcomes, report, store=store, progress=lambda _m: None)
+    assert report.indexed == 1
+    assert store.memory_count() >= 1
+
+
+def test_scan_indexing_survives_a_dead_embedder(monkeypatch):
+    """Research and triage already succeeded; a down Ollama must not raise —
+    the scan stands, indexing just waits for a later /index or scan."""
+    from companies_research import memory, pipeline
+
+    def broken(_texts):
+        raise memory.MemoryUnavailable("no Ollama at http://localhost:11434")
+
+    monkeypatch.setattr(memory, "embed_texts", broken)
+    store = Store()
+    outcomes = {"acme.io": _save_research(store, "acme.io", "anvils")}
+    report = pipeline.ScanReport()
+    # Must not raise.
+    pipeline._index_researched(outcomes, report, store=store, progress=lambda _m: None)
+    assert report.indexed == 0
+
+
+def test_scan_indexing_is_refused_when_memory_write_is_revoked(monkeypatch):
+    """The knowledge-base write goes through the same gate as every other scan
+    write: no memory:write scope, no indexing — and nothing is embedded."""
+    monkeypatch.setenv("TOOL_SCOPES", "mail:read,research:read")  # no memory:write
+    from companies_research.config import reload_settings
+
+    reload_settings()
+    from companies_research import memory, pipeline
+
+    monkeypatch.setattr(memory, "embed_texts", fake_embed)
+    store = Store()
+    outcomes = {"acme.io": _save_research(store, "acme.io", "anvils")}
+    report = pipeline.ScanReport()
+    pipeline._index_researched(outcomes, report, store=store, progress=lambda _m: None)
+    assert report.indexed == 0
+    assert store.memory_count() == 0
+
+
 # --- Drive content is fenced as untrusted ------------------------------------
 
 

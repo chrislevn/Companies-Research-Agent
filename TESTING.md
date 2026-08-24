@@ -30,9 +30,14 @@ Put `-v` after `./start.sh` on any command to watch the logs live
 - `testmail` — local LLM writes a brand-new enquiry and sends it to your inbox
   (subject + body print so you see what was sent)
 - `./start.sh -v scan --since 1h --include-known` — watch the log:
-  fetched → triaged → lead recorded. `--include-known` is the testing switch:
-  it also lets through mail sent from your **own** address, which is exactly
-  what testmail is
+  fetched → triaged → lead recorded → researched → **indexed into the knowledge
+  base**. `--include-known` is the testing switch: it also lets through mail
+  sent from your **own** address, which is exactly what testmail is
+- A lead's company is now researched *and* folded into the knowledge base by
+  the scan itself — no manual `chat -m /index` needed. Straight after a scan,
+  `./start.sh chat -m "what do you know about <company>?"` answers from the
+  freshly-indexed profile. Indexing is non-fatal: if Ollama's embedder is down
+  the scan still succeeds and the log says the knowledge base was not updated
 - If a rerun says already processed, add `--reprocess`
 - `./start.sh -v scan` (plain) is the realistic path — it skips your own mail
   ("sent by you") and known senders; use it when the mail comes from a
@@ -92,8 +97,10 @@ Put `-v` after `./start.sh` on any command to watch the logs live
   → `save_memory`
 - A **new** run: `./start.sh chat -m "<company> đang cần gì và ngân sách bao nhiêu?"`
   → `search_memory` still answers after restart (memory is SQLite)
-- `./start.sh chat -m /index` — folds research + briefs into the memory corpus,
-  so the agent can also answer from research it did earlier
+- `./start.sh chat -m /index` — folds **all** research + briefs into the memory
+  corpus at once. A scan already indexes each company it researches, so `/index`
+  is now the catch-up/backfill (e.g. profiles researched while the embedder was
+  down, or briefs), not the only way research becomes searchable
 
 ## 7. Tool Harness — the six gates
 

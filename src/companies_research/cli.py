@@ -807,6 +807,8 @@ def _as_dict(report: ScanReport) -> dict:
         "errors": [{"account": e.account.account_id, "error": e.error} for e in report.errors],
         "fetched": report.fetched,
         "skipped": report.skip_counts(),
+        "researched": sum(1 for _, o in report.researched if o.ok),
+        "indexed": report.indexed,
         "triaged": [
             {
                 "uid": message.uid,
@@ -833,7 +835,14 @@ def _print_report(report: ScanReport) -> None:
         print(f"  skipped {count:>3}  — {reason}")
 
     leads = report.leads
-    print(f"\nTriaged {len(report.triaged)}; {len(leads)} lead(s) worth researching\n")
+    print(f"\nTriaged {len(report.triaged)}; {len(leads)} lead(s) worth researching")
+    if report.researched:
+        profiled = sum(1 for _, o in report.researched if o.ok)
+        line = f"Researched {profiled}/{len(report.researched)} compan(y/ies)"
+        if report.indexed:
+            line += f"; indexed {report.indexed} into the knowledge base"
+        print(line)
+    print()
 
     for message, result in report.triaged:
         marker = "★" if result.should_research else "·"

@@ -150,6 +150,46 @@ def _render_profile(record: dict) -> str:
     return "\n".join(lines)
 
 
+def _reindex_source(store: Store, source: str, text: str, *,
+                    user_id: str = "default") -> int:
+    """Replace one source's rows in the knowledge base with a fresh embedding.
+
+    Embed first, replace second: a dead Ollama must cost nothing, not silently
+    delete what an earlier run indexed. Returns the number of chunks written.
+    Raises :class:`MemoryUnavailable` if the embedder is unreachable.
+    """
+    chunks = chunk_text(text)
+    if not chunks:
+        return 0
+    vectors = embed_texts(chunks)  # raises before anything is touched
+    store.replace_memories_for_source(source, user_id=user_id)
+    for index, (piece, vector) in enumerate(zip(chunks, vectors)):
+        store.add_memory(text=piece, embedding=vector, category="knowledge",
+                         source=source, chunk_index=index, user_id=user_id)
+    return len(chunks)
+
+
+def index_research_domain(domain: str, *, user_id: str = "default",
+                          store: Store | None = None) -> int:
+    """Fold ONE company's cached research into the searchable knowledge base.
+
+    The scan calls this per newly-researched domain so a fresh profile is
+    recallable immediately, without re-embedding the whole corpus. A no-op
+    (returns 0) when the domain has no successful cached research yet or its
+    profile renders empty. Raises :class:`MemoryUnavailable` if the embedder
+    is down — the caller decides whether that is fatal.
+    """
+    store = store or Store()
+    record = next((r for r in store.iter_research() if r.get("domain") == domain),
+                  None)
+    if record is None:
+        return 0
+    text = _render_profile(record)
+    if not text.strip():
+        return 0
+    return _reindex_source(store, f"research:{domain}", text, user_id=user_id)
+
+
 def index_knowledge(*, user_id: str = "default", store: Store | None = None) -> dict:
     """Embed what this agent already knows — research profiles and briefs.
 
@@ -162,17 +202,7 @@ def index_knowledge(*, user_id: str = "default", store: Store | None = None) -> 
     indexed = {"research": 0, "briefs": 0, "chunks": 0}
 
     def reindex(source: str, text: str) -> int:
-        """Embed first, replace second: a dead Ollama must cost nothing,
-        not silently delete what an earlier run indexed."""
-        chunks = chunk_text(text)
-        if not chunks:
-            return 0
-        vectors = embed_texts(chunks)  # raises before anything is touched
-        store.replace_memories_for_source(source, user_id=user_id)
-        for index, (piece, vector) in enumerate(zip(chunks, vectors)):
-            store.add_memory(text=piece, embedding=vector, category="knowledge",
-                             source=source, chunk_index=index, user_id=user_id)
-        return len(chunks)
+        return _reindex_source(store, source, text, user_id=user_id)
 
     for record in store.iter_research():
         text = _render_profile(record)
