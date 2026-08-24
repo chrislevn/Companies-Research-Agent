@@ -865,9 +865,22 @@ class Store:
             messages = conn.execute(
                 "DELETE FROM processed_messages WHERE user_id = ?", (user_id,)
             ).rowcount
+            # Memory rows written on this user's behalf mostly sit under the
+            # 'default' user id (the chat runs single-user), so matching the
+            # id alone would leave the indexed copies of their research and
+            # briefs searchable after the purge. Attribute by source the same
+            # way briefs are attributed above: erasure wins over precision.
             memories = conn.execute(
                 "DELETE FROM memories WHERE user_id = ?", (user_id,)
             ).rowcount
+            for domain in domains:
+                memories += conn.execute(
+                    "DELETE FROM memories WHERE source = ?", (f"research:{domain}",)
+                ).rowcount
+            for brief_id in brief_ids:
+                memories += conn.execute(
+                    "DELETE FROM memories WHERE source = ?", (f"brief:{brief_id}",)
+                ).rowcount
             briefs = 0
             for brief_id in brief_ids:
                 briefs += conn.execute(

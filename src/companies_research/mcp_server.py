@@ -557,10 +557,17 @@ def build_server():
     # refusal the gates already phrase for models.
 
     def _gated(fn, /, **kwargs) -> dict:
+        from .drive import DriveUnavailable
+        from .memory import MemoryUnavailable
+
         try:
             return {"ok": True, "result": fn(**kwargs)}
         except harness.ToolDenied as denied:
             return {"ok": False, **denied.as_refusal()}
+        except (DriveUnavailable, MemoryUnavailable) as exc:
+            # Predictable absences (no credential, no Ollama) degrade into an
+            # answer the client model can read, like every other refusal here.
+            return {"ok": False, "error": str(exc)}
 
     @server.tool(
         description="List files in the operator's Google Drive: names, IDs, "

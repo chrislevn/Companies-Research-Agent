@@ -83,11 +83,9 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
             f"no Ollama at {host} — start it with `ollama serve`"
         ) from None
     except httpx.HTTPStatusError as exc:
-        detail = ""
-        try:
-            detail = str(exc.response.json().get("error") or "")[:200]
-        except Exception:
-            detail = f"HTTP {exc.response.status_code}"
+        from .agents.backends import _ollama_error
+
+        detail = _ollama_error(exc.response)
         if "not found" in detail:
             detail += f" — pull it with `ollama pull {model}`"
         raise MemoryUnavailable(f"embedding failed: {detail}") from None
@@ -163,21 +161,29 @@ def index_knowledge(*, user_id: str = "default", store: Store | None = None) -> 
     store = store or Store()
     indexed = {"research": 0, "briefs": 0, "chunks": 0}
 
+    def reindex(source: str, text: str) -> int:
+        """Embed first, replace second: a dead Ollama must cost nothing,
+        not silently delete what an earlier run indexed."""
+        chunks = chunk_text(text)
+        if not chunks:
+            return 0
+        vectors = embed_texts(chunks)  # raises before anything is touched
+        store.replace_memories_for_source(source, user_id=user_id)
+        for index, (piece, vector) in enumerate(zip(chunks, vectors)):
+            store.add_memory(text=piece, embedding=vector, category="knowledge",
+                             source=source, chunk_index=index, user_id=user_id)
+        return len(chunks)
+
     for record in store.iter_research():
-        source = f"research:{record['domain']}"
         text = _render_profile(record)
         if not text.strip():
             continue
-        store.replace_memories_for_source(source, user_id=user_id)
-        saved = remember(text, category="knowledge", source=source,
-                         user_id=user_id, store=store)
+        indexed["chunks"] += reindex(f"research:{record['domain']}", text)
         indexed["research"] += 1
-        indexed["chunks"] += saved.get("saved_chunks", 0)
 
     for record in store.list_briefs():
         if not record.get("brief"):
             continue
-        source = f"brief:{record['id']}"
         try:
             from .briefs.render import to_markdown
             from .models import Brief
@@ -185,11 +191,8 @@ def index_knowledge(*, user_id: str = "default", store: Store | None = None) -> 
             text = to_markdown(Brief.model_validate(record["brief"]))
         except Exception:  # an unrenderable brief still has a headline
             text = f"Brief for {record.get('company', '')} ({record.get('domain', '')})"
-        store.replace_memories_for_source(source, user_id=user_id)
-        saved = remember(text, category="knowledge", source=source,
-                         user_id=user_id, store=store)
+        indexed["chunks"] += reindex(f"brief:{record['id']}", text)
         indexed["briefs"] += 1
-        indexed["chunks"] += saved.get("saved_chunks", 0)
 
     return indexed
 

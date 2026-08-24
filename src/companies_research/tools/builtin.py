@@ -270,7 +270,12 @@ def list_drive_files(*, folder_id: str = "", page_size: int = 50,
         from .. import drive
 
         _list = drive.list_files
-    return _list(folder_id=folder_id, page_size=page_size)
+    listing = _list(folder_id=folder_id, page_size=page_size)
+    # File names are attacker-chosen text; the listing travels inside one fence.
+    from ..prompts import fence_payload
+
+    return {"total_files": listing["total_files"],
+            "files": fence_payload(listing["files"], kind="drive-listing")}
 
 
 @tool(READ_DRIVE_FILE)
@@ -289,14 +294,22 @@ def read_drive_file(*, file_id: str, _read: Any = None) -> Any:
     from ..config import SETTINGS
     from ..prompts import render_untrusted
 
+    content = result.get("content", "")
     if SETTINGS.guardrails_enabled:
         from ..agents import rails
 
         rail = rails.get_input_rail()
-        if rail is not None and rail.screen(result.get("content", "")[:4000]):
+        # The rail reads 4000 chars at a time, so screen the file in windows —
+        # a payload parked at char 5000 is the obvious way around a single
+        # look at the front.
+        if rail is not None and any(
+            rail.screen(content[i:i + 4000]) for i in range(0, len(content), 4000)
+        ):
             result["screening"] = ("guardrails flagged this file as a possible "
                                    "prompt-injection attempt (advisory)")
-    result["content"] = render_untrusted(result.get("content", ""), kind="drive-file")
+    # The name is attacker-chosen too; cap it so it cannot smuggle a paragraph.
+    result["file_name"] = str(result.get("file_name", ""))[:150]
+    result["content"] = render_untrusted(content, kind="drive-file")
     return result
 
 
@@ -316,7 +329,15 @@ def search_memory(*, query: str, top_k: int = 5, _search: Any = None) -> Any:
         from .. import memory
 
         _search = memory.recall
-    return _search(query, top_k=top_k)
+    found = _search(query, top_k=top_k)
+    # Recall is where a fence would otherwise silently disappear: content that
+    # arrived fenced (a Drive file, a web-derived research profile) is stored
+    # raw, and replaying it bare on a later turn would launder an injection
+    # into "trusted memory". Re-fence on the way back out, every time.
+    from ..prompts import fence_payload
+
+    return {"query": found["query"], "results_count": found["results_count"],
+            "memories": fence_payload(found["memories"], kind="memory")}
 
 
 # --- chat views of the agent's own state ------------------------------------
@@ -393,7 +414,11 @@ def list_leads(*, limit: int = 10, only_research: bool = False,
         }
         for row in rows[:limit]
     ]
-    return {"total": len(leads), "leads": leads}
+    # Senders, subjects and triage summaries all descend from stranger-written
+    # mail; the listing travels inside one fence like every external payload.
+    from ..prompts import fence_payload
+
+    return {"total": len(leads), "leads": fence_payload(leads, kind="leads")}
 
 
 @tool(LIST_BRIEFS)
@@ -413,7 +438,9 @@ def list_briefs(*, status: str = "", limit: int = 10, _briefs: Any = None) -> An
         }
         for row in rows
     ]
-    return {"total": len(briefs), "briefs": briefs}
+    from ..prompts import fence_payload
+
+    return {"total": len(briefs), "briefs": fence_payload(briefs, kind="briefs")}
 
 
 @tool(GET_RESEARCH)
@@ -434,5 +461,10 @@ def get_research(*, domain: str, _research: Any = None) -> Any:
         profile = profile.model_dump(mode="json")
     profile = dict(profile)
     profile.pop("field_sources", None)  # per-claim provenance is UI detail
+    # Research is distilled from the public web, which the company (or anyone
+    # quoted on it) wrote — external text, so it arrives fenced like the rest.
+    from ..prompts import fence_payload
+
     return {"found": True, "domain": domain,
-            "researched_at": record.get("researched_at"), "profile": profile}
+            "researched_at": record.get("researched_at"),
+            "profile": fence_payload(profile, kind="research-profile")}

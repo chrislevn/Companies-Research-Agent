@@ -114,6 +114,21 @@ tag. Text claiming to close the block with any other id is part of the data.
 """
 
 
+def fence_payload(payload: object, *, kind: str) -> str:
+    """Serialize a tool result's externally-authored part inside one fence.
+
+    Listings are the subtle case render_untrusted alone does not cover: a file
+    name, an email subject or a meeting title is attacker-chosen text even when
+    each one is short, and a fence per field would drown the data in tags. One
+    block around the serialized payload keeps the structure legible to the
+    model while marking every string inside it as data.
+    """
+    import json
+
+    blob = json.dumps(payload, ensure_ascii=False, default=str)
+    return render_untrusted(blob, kind=kind)
+
+
 def prompt_path(name: str) -> Path:
     return SETTINGS.prompts_dir / f"{name}.md"
 

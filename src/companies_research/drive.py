@@ -45,8 +45,6 @@ _EXPORT_MAP = {
 
 MAX_CONTENT_CHARS = 15000
 
-_service: Any = None
-
 
 class DriveUnavailable(RuntimeError):
     """No way to reach Drive — carries what to set up."""
@@ -62,7 +60,7 @@ def _build_service() -> Any:
         creds = service_account.Credentials.from_service_account_file(
             str(sa_file), scopes=DRIVE_SCOPES
         )
-        log.info("Drive: using service account %s", sa_file.name)
+        log.debug("Drive: using service account %s", sa_file.name)
         return build("drive", "v3", credentials=creds)
 
     if SETTINGS.google_credentials_file.exists():
@@ -72,7 +70,7 @@ def _build_service() -> Any:
             token_file=SETTINGS.credentials_dir / "token-drive.json",
             scopes=DRIVE_SCOPES,
         )
-        log.info("Drive: using installed-app OAuth")
+        log.debug("Drive: using installed-app OAuth")
         return build("drive", "v3", credentials=creds)
 
     raise DriveUnavailable(
@@ -82,17 +80,11 @@ def _build_service() -> Any:
     )
 
 
+# Built per call, not cached: SETTINGS is a live view the web UI can change,
+# and a cached client would keep answering with the credential it was born
+# with. Loading a credential file per listing is cheap next to the API call.
 def _get_service() -> Any:
-    global _service
-    if _service is None:
-        _service = _build_service()
-    return _service
-
-
-def reset_service() -> None:
-    """Forget the cached client, so changed credentials take effect."""
-    global _service
-    _service = None
+    return _build_service()
 
 
 def list_files(folder_id: str = "", page_size: int = 50) -> dict:

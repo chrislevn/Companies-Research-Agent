@@ -323,3 +323,50 @@ def test_guard_lets_non_http_scopes_straight_through():
 
     _run(_Guard(inner, auth_token="s3cret")({"type": "lifespan"}, None, None))
     assert ran
+
+
+# ---------------------------------------------------------------------------
+# drive + memory over MCP: same gates, structured degradation
+# ---------------------------------------------------------------------------
+
+
+def test_memory_write_over_mcp_is_refused_at_the_gate(server, monkeypatch):
+    monkeypatch.setenv("TOOL_SCOPES", "memory:read")
+    from companies_research.config import reload_settings
+
+    reload_settings()
+    outcome = _payload(_run(server.call_tool(
+        "save_memory", {"content": "remember this"})))
+    assert outcome["ok"] is False
+    assert outcome["gate"] == "scopes"
+
+
+def test_memory_unavailable_degrades_into_an_answer(server, monkeypatch):
+    """A dead Ollama must come back as words, not a raw exception."""
+    from companies_research import memory
+
+    # With nothing stored, recall answers before embedding — seed one row so
+    # the query actually needs the embedder.
+    Store().add_memory(text="the user likes tea", embedding=[1.0, 0.0])
+
+    def broken(_texts):
+        raise memory.MemoryUnavailable("no Ollama at http://localhost:11434")
+
+    monkeypatch.setattr(memory, "embed_texts", broken)
+    outcome = _payload(_run(server.call_tool(
+        "search_memory", {"query": "anything"})))
+    assert outcome["ok"] is False
+    assert "Ollama" in outcome["error"]
+
+
+def test_drive_over_mcp_reports_missing_credentials(server, monkeypatch, tmp_path):
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(tmp_path / "no-sa.json"))
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_FILE", str(tmp_path / "no-oauth.json"))
+    monkeypatch.setenv("GOOGLE_TOKEN_FILE", str(tmp_path / "creds" / "token.json"))
+    from companies_research.config import reload_settings
+
+    reload_settings()
+    outcome = _payload(_run(server.call_tool("list_drive_files", {})))
+    # With no credential anywhere the auth gate refuses before Drive is reached.
+    assert outcome["ok"] is False
+    assert outcome.get("gate") == "auth" or "credential" in outcome.get("error", "")
