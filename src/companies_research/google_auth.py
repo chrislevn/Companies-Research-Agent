@@ -17,8 +17,6 @@ from typing import Callable
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import Resource, build
-
 from .config import GOOGLE_SCOPES, SETTINGS
 
 log = logging.getLogger(__name__)
@@ -151,7 +149,3 @@ def _save(creds: Credentials, token_file: Path) -> None:
     token_file.write_text(creds.to_json(), encoding="utf-8")
     token_file.chmod(0o600)
     log.info("Saved Google token to %s", token_file)
-
-
-def calendar_service(creds: Credentials | None = None) -> Resource:
-    return build("calendar", "v3", credentials=creds or get_credentials(), cache_discovery=False)

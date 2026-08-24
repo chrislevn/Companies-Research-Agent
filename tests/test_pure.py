@@ -184,3 +184,61 @@ def test_nested_models_are_sanitised_too():
     for definition in schema.get("$defs", {}).values():
         if definition.get("type") == "object" and "properties" in definition:
             assert definition["additionalProperties"] is False
+
+
+# --- a dead backend must degrade, never raise -------------------------------
+# Added after an exhausted API key took down a whole scan with a stack trace.
+# The Ollama backend had always honoured this contract; the Anthropic one did
+# not, and the gap only showed when the credit ran out.
+
+class _ExplodingClient:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+        self.messages = self
+
+    def create(self, **_kw):
+        raise self._exc
+
+
+def _anthropic_with(exc: Exception):
+    from companies_research.agents.backends import AnthropicBackend
+
+    return AnthropicBackend(client=_ExplodingClient(exc))
+
+
+def test_an_exhausted_credit_balance_becomes_a_completion_error():
+    backend = _anthropic_with(Exception(
+        "Error code: 400 - {'error': {'message': 'Your credit balance is too low "
+        "to access the Anthropic API.'}}"))
+    completion = backend.complete(system="s", user="u", schema={})
+    assert completion.error, "a billing failure must not raise"
+    assert "credit balance is exhausted" in completion.error
+    assert "TRIAGE_BACKEND=ollama" in completion.error, "the error should say what to do"
+
+
+def test_a_bad_api_key_names_the_setting_to_fix():
+    backend = _anthropic_with(Exception("authentication_error: invalid x-api-key"))
+    assert "ANTHROPIC_API_KEY" in backend.complete(system="s", user="u", schema={}).error
+
+
+def test_any_unexpected_failure_still_degrades():
+    backend = _anthropic_with(RuntimeError("something nobody predicted"))
+    completion = backend.complete(system="s", user="u", schema={})
+    assert completion.error and not completion.text
+
+
+def test_a_dead_backend_still_returns_one_result_per_message():
+    """The never-drop-a-message guarantee, under total backend failure."""
+    from companies_research.agents.triage import TriageAgent
+    from companies_research.models import EmailAddress, EmailMessage
+
+    messages = [
+        EmailMessage(message_id=f"m{i}", thread_id=f"m{i}", subject="s",
+                     sender=EmailAddress(name="A", email="a@b.com"), to=[],
+                     body_text="hi", snippet="", received_at=None)
+        for i in range(5)
+    ]
+    agent = TriageAgent(backend=_anthropic_with(Exception("credit balance is too low")))
+    results = agent.triage(messages)
+    assert len(results) == 5, "a dead backend dropped messages"
+    assert all(not r.should_research and r.confidence == 0.0 for r in results)

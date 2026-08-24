@@ -68,8 +68,3 @@ def _sanitize(node: Any) -> Any:
 
 def json_schema_for(model: type[BaseModel]) -> dict[str, Any]:
     return _sanitize(model.model_json_schema())
-
-
-def output_format_for(model: type[BaseModel]) -> dict[str, Any]:
-    """Value for ``output_config["format"]``."""
-    return {"type": "json_schema", "schema": json_schema_for(model)}

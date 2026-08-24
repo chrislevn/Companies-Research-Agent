@@ -49,14 +49,6 @@ def load_accounts(*, include_disabled: bool = False) -> list[Account]:
     return [a for a in accounts if a.enabled]
 
 
-def get_account(account_id: str) -> Account:
-    for account in load_accounts(include_disabled=True):
-        if account.account_id == account_id:
-            return account
-    known = ", ".join(a.account_id for a in load_accounts(include_disabled=True))
-    raise AccountsError(f"No account {account_id!r}. Known accounts: {known or '(none)'}")
-
-
 # ---------------------------------------------------------------------------
 
 

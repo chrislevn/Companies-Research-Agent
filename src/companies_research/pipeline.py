@@ -497,6 +497,7 @@ def seed_known_senders(
     """
     store = store or Store()
     say = progress or (lambda _msg: None)
+    tools.set_caller("pipeline.seed")
     accounts = load_accounts()
     if account_ids:
         wanted = set(account_ids)
@@ -510,7 +511,20 @@ def seed_known_senders(
                     say(f"Reading {folder.value} mail in {account.email or account.account_id}")
                     query = MessageQuery.recent(since, max_results=max_results, folder=folder)
                     try:
-                        messages = provider.fetch(query)
+                        # Through the same gate as a scan. Seeding reads *more*
+                        # mail than a scan does -- months of both inbox and sent
+                        # -- so leaving it ungated meant the largest read in the
+                        # system was also the only unscoped, unaudited one.
+                        messages = tools.gmail_read(
+                            account_id=account.account_id,
+                            folder=folder.value,
+                            max_results=max_results,
+                            _fetch=lambda q=query: provider.fetch(q),
+                        )
+                    except tools.ToolDenied as exc:
+                        log.warning("[%s] %s seed read denied at %s: %s",
+                                    account.account_id, folder.value, exc.gate, exc.reason)
+                        continue
                     except ProviderError as exc:
                         log.warning("[%s] %s folder unavailable: %s", account.account_id, folder.value, exc)
                         continue

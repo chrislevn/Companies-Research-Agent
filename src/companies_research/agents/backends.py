@@ -98,26 +98,45 @@ class AnthropicBackend:
         if self.model.startswith(EFFORT_MODELS):
             output_config["effort"] = self.effort
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=MAX_TOKENS,
-            system=system,
-            output_config=output_config,
-            messages=[{"role": "user", "content": user}],
-        )
+        from ..obs import langfuse as _lf
 
-        from ..obs import usage_from_response
+        with _lf.generation("triage", model=self.model, stage="triage",
+                            prompt={"system": system, "user": user},
+                            effort=output_config.get("effort")) as gen:
+            try:
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=MAX_TOKENS,
+                    system=system,
+                    output_config=output_config,
+                    messages=[{"role": "user", "content": user}],
+                )
+            except Exception as exc:
+                # The same contract the Ollama backend has kept all along: a
+                # dead backend is a low-confidence `unknown`, not a stack trace.
+                # This was missing here, and the failure it lets through is the
+                # worst kind — an exhausted API key or a revoked credential
+                # takes down the whole scan rather than one batch, and it does
+                # so at exactly the moment nobody has time to debug it.
+                detail = _anthropic_error(exc)
+                log.error("Triage call failed: %s", detail)
+                gen.finish(error=detail)
+                return Completion(error=detail)
 
-        usage = usage_from_response(response, model=self.model)
-        if response.stop_reason == "refusal":
-            category = getattr(response.stop_details, "category", None)
-            log.warning("Triage refused: %s", category)
-            return Completion(error="model refused to classify", usage=usage)
+            from ..obs import usage_from_response
 
-        text = next((b.text for b in response.content if b.type == "text"), "")
-        return Completion(
-            text=text, truncated=response.stop_reason == "max_tokens", usage=usage
-        )
+            usage = usage_from_response(response, model=self.model)
+            if response.stop_reason == "refusal":
+                category = getattr(response.stop_details, "category", None)
+                log.warning("Triage refused: %s", category)
+                gen.finish(usage=usage, error=f"refusal: {category}")
+                return Completion(error="model refused to classify", usage=usage)
+
+            text = next((b.text for b in response.content if b.type == "text"), "")
+            truncated = response.stop_reason == "max_tokens"
+            gen.finish(output=text, usage=usage, truncated=truncated,
+                       stop_reason=response.stop_reason)
+            return Completion(text=text, truncated=truncated, usage=usage)
 
 
 # --- local -----------------------------------------------------------------
@@ -155,6 +174,18 @@ class OllamaBackend:
                 {"role": "user", "content": user},
             ],
         }
+        from ..obs import langfuse as _lf
+
+        gen_ctx = _lf.generation("triage", model=self.model, stage="triage",
+                                 prompt={"system": system, "user": user},
+                                 backend="ollama", num_ctx=self.num_ctx)
+        gen = gen_ctx.__enter__()
+        try:
+            return self._chat(payload, gen)
+        finally:
+            gen_ctx.__exit__(None, None, None)
+
+    def _chat(self, payload: dict[str, Any], gen: Any) -> Completion:
         try:
             response = httpx.post(
                 f"{self.host}/api/chat", json=payload, timeout=self.timeout
@@ -162,19 +193,23 @@ class OllamaBackend:
             response.raise_for_status()
             body = response.json()
         except httpx.ConnectError:
+            gen.finish(error="connect")
             return Completion(
                 error=f"no Ollama at {self.host} — start it with `ollama serve`"
             )
         except httpx.TimeoutException:
+            gen.finish(error="timeout")
             return Completion(
                 error=f"Ollama did not answer within {self.timeout:.0f}s "
                 "(try a smaller model or a smaller TRIAGE_BATCH_SIZE)"
             )
         except httpx.HTTPStatusError as exc:
             detail = _ollama_error(exc.response)
+            gen.finish(error=f"http: {detail}")
             return Completion(error=f"Ollama rejected the request: {detail}")
         except Exception as exc:  # network stack, bad JSON, anything else
             log.exception("Ollama call failed")
+            gen.finish(error=f"{type(exc).__name__}")
             return Completion(error=f"Ollama call failed: {exc}")
 
         text = (body.get("message") or {}).get("content", "") or ""
@@ -187,7 +222,22 @@ class OllamaBackend:
                 "or lower TRIAGE_BATCH_SIZE",
                 self.num_ctx,
             )
+        gen.finish(output=text, truncated=truncated)
         return Completion(text=text, truncated=truncated)
+
+
+def _anthropic_error(exc: Exception) -> str:
+    """A short, actionable reason. Billing and auth are worth naming outright."""
+    text = str(exc)
+    if "credit balance is too low" in text:
+        return ("Anthropic credit balance is exhausted — top up at "
+                "console.anthropic.com/settings/billing, or set TRIAGE_BACKEND=ollama "
+                "to classify locally")
+    if "authentication_error" in text or "invalid x-api-key" in text:
+        return "Anthropic rejected the API key — check ANTHROPIC_API_KEY in .env"
+    if "rate_limit" in text:
+        return "Anthropic rate limit reached; the batch was not classified"
+    return f"{type(exc).__name__}: {text[:200]}"
 
 
 def _ollama_error(response: httpx.Response) -> str:

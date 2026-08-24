@@ -409,10 +409,6 @@ class Store:
             out.append(record)
         return out
 
-    def tool_call_count(self) -> int:
-        with self._connect() as conn:
-            return conn.execute("SELECT COUNT(*) AS n FROM tool_calls").fetchone()["n"]
-
     # ---------- briefs ----------
 
     def save_brief(self, brief) -> str:
@@ -467,13 +463,22 @@ class Store:
             rows = conn.execute(sql, params).fetchall()
         return [r for r in (self._brief_row(row) for row in rows) if r]
 
-    # A brief moves forward only. Re-approving a delivered brief would quietly
-    # undo the record that it was sent, and re-approving a rejected one would
-    # erase somebody's decision — both look like success from the UI.
+    # A decision can be withdrawn; a delivery cannot.
+    #
+    # `approved` and `rejected` may both return to `draft`, because a human
+    # changing their mind before anything is sent is the entire point of having
+    # a human in the loop. Withdrawal goes to `draft` rather than straight to
+    # the opposite verdict, so reconsidering still costs a fresh decision —
+    # nobody flips a rejection into an approval in one click.
+    #
+    # `delivered` is terminal and stays that way. The brief has left the
+    # machine; moving it back to `draft` would erase the record that it was
+    # sent while looking like success in the UI, which is the failure this
+    # table exists to prevent.
     BRIEF_TRANSITIONS = {
         "draft": {"approved", "rejected"},
-        "approved": {"delivered", "rejected"},
-        "rejected": set(),
+        "approved": {"delivered", "rejected", "draft"},
+        "rejected": {"draft"},
         "delivered": set(),
     }
 
@@ -489,6 +494,24 @@ class Store:
             return False
         brief = record["brief"]
         brief["status"] = status
+
+        if status == "draft":
+            # Withdrawn. The approver is cleared rather than kept, because a
+            # draft that still names an approver reads as approved to anyone
+            # scanning the list — and the person who withdrew it is in the log.
+            log.info("Brief %s withdrawn to draft by %s (was %s, approved by %s)",
+                     brief_id, approved_by or "operator", record["status"],
+                     record["approved_by"] or "—")
+            brief["approved_by"] = ""
+            brief["approved_at"] = None
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE briefs SET status = ?, approved_by = '', approved_at = NULL, "
+                    "brief_json = ? WHERE id = ?",
+                    (status, json.dumps(brief), brief_id),
+                )
+            return True
+
         stamp = _now() if status in ("approved", "rejected") else record["approved_at"]
         if status in ("approved", "rejected"):
             brief["approved_by"] = approved_by

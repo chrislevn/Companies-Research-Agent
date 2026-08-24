@@ -249,3 +249,70 @@ def test_delivery_failure_is_reported_not_raised(store, monkeypatch):
 def test_missing_brief_is_reported(store):
     out = deliver(brief_id="nope", recipient="owner@example.com", store=store)
     assert not out.ok and "no brief" in out.error
+
+
+# --- withdrawing a decision -------------------------------------------------
+# A human in the loop who cannot change their mind is a rubber stamp. But the
+# reversal has one hard edge: once a brief has been delivered the mail has left
+# the machine, and a UI that showed `draft` afterwards would be stating
+# something false about the world.
+
+
+def test_an_approval_can_be_withdrawn_before_delivery(store):
+    brief_id = _approved(store)
+    assert store.set_brief_status(brief_id, "draft", approved_by="chris")
+    record = store.get_brief(brief_id)
+    assert record["status"] == "draft"
+
+
+def test_withdrawing_clears_the_approver(store):
+    """A draft that still names an approver reads as approved in a list."""
+    brief_id = _approved(store)
+    store.set_brief_status(brief_id, "draft", approved_by="chris")
+    record = store.get_brief(brief_id)
+    assert not record["approved_by"]
+    assert not record["approved_at"]
+    assert not record["brief"]["approved_by"]
+
+
+def test_a_withdrawn_brief_can_be_approved_again(store):
+    brief_id = _approved(store)
+    store.set_brief_status(brief_id, "draft", approved_by="chris")
+    assert store.set_brief_status(brief_id, "approved", approved_by="chris")
+    assert store.get_brief(brief_id)["status"] == "approved"
+
+
+def test_a_rejection_can_be_reconsidered_but_only_back_to_draft(store):
+    """Reconsidering must still cost a fresh decision, not one click."""
+    brief_id = store.save_brief(build_brief(triage=_triage(), lead_id="lead-r"))
+    store.set_brief_status(brief_id, "rejected", approved_by="chris")
+    assert store.set_brief_status(brief_id, "approved", approved_by="chris") is False
+    assert store.set_brief_status(brief_id, "draft", approved_by="chris")
+    assert store.set_brief_status(brief_id, "approved", approved_by="chris")
+
+
+def test_a_delivered_brief_can_never_be_withdrawn(store, monkeypatch):
+    """The one reversal that would state something false about the world."""
+    monkeypatch.setenv("TOOL_SCOPES", "brief:deliver")
+    from companies_research.config import reload_settings
+
+    reload_settings()
+    brief_id = _approved(store)
+    assert deliver(brief_id=brief_id, recipient="owner@example.com", store=store).ok
+    assert store.get_brief(brief_id)["status"] == "delivered"
+
+    assert store.set_brief_status(brief_id, "draft", approved_by="chris") is False
+    assert store.get_brief(brief_id)["status"] == "delivered"
+
+
+def test_a_withdrawn_brief_cannot_be_delivered(store, monkeypatch):
+    """Withdrawal must actually remove the authority to send."""
+    monkeypatch.setenv("TOOL_SCOPES", "brief:deliver")
+    from companies_research.config import reload_settings
+
+    reload_settings()
+    brief_id = _approved(store)
+    store.set_brief_status(brief_id, "draft", approved_by="chris")
+    out = deliver(brief_id=brief_id, recipient="owner@example.com", store=store)
+    assert not out.ok
+    assert "not approved" in out.error

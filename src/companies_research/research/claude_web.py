@@ -91,6 +91,31 @@ class ClaudeWebResearch:
     # ------------------------------------------------------------------
 
     def research(self, *, company: str, domain: str, context: str = "") -> ResearchOutcome:
+        """Public entry point. Records one Langfuse generation per lookup.
+
+        A wrapper rather than instrumentation sprinkled through the loop below:
+        that loop has nine exit points and resumes itself up to ``MAX_RESUMES``
+        times, so recording at each one would mean nine chances to forget, and
+        a resumed turn is still one lookup from the caller's side.
+        """
+        from ..obs import langfuse as _lf
+
+        with _lf.generation("research", model=self.model, stage="research",
+                            prompt={"company": company, "domain": domain,
+                                    "context": context},
+                            effort=self.effort) as gen:
+            outcome = self._research(company=company, domain=domain, context=context)
+            gen.finish(
+                output=(outcome.profile.model_dump(mode="json")
+                        if outcome.profile else None),
+                error=outcome.error or None,
+                searches=outcome.searches,
+                fetches=outcome.fetches,
+                confidence=(outcome.profile.confidence if outcome.profile else None),
+            )
+            return outcome
+
+    def _research(self, *, company: str, domain: str, context: str = "") -> ResearchOutcome:
         if not (company or domain):
             return ResearchOutcome(error="no company name or domain to research")
 
