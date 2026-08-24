@@ -283,6 +283,14 @@ def auth_status(request: Request) -> dict:
     from . import auth
 
     user = auth.user_for_session(request.cookies.get(_SESSION_COOKIE, ""))
+    # Mirror the guard's local bypass so the PAGE agrees with the API: with
+    # AUTH_DISABLED on and the request genuinely local, report the owner as
+    # signed in, so the front-end skips the login screen instead of showing a
+    # form for a wall the API is no longer enforcing. Same two-condition gate as
+    # the guard — _request_is_local is False over a tunnel, so this can never
+    # report authenticated on a deployed box.
+    if user is None and SETTINGS.auth_disabled and _request_is_local(request):
+        user = auth.ensure_local_owner()
     return {
         "authenticated": user is not None,
         "has_users": auth.user_count() > 0,

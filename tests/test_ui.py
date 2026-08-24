@@ -46,6 +46,10 @@ def app():
         "DB_PATH": f"{tmp}/ui.db", "PROMPTS_DIR": f"{tmp}/prompts",
         "ORG_PROFILE_FILE": f"{tmp}/profile.json", "DELIVERY_DIR": f"{tmp}/briefs",
         "METRICS_ENABLED": "false", "WATCH_ENABLED": "false",
+        # These tests drive the real login wall (they sign up through the form),
+        # so pin the bypass off regardless of the developer's .env — otherwise
+        # AUTH_DISABLED=true auto-signs-in and #view-auth never appears.
+        "AUTH_DISABLED": "false",
         "PYTHONPATH": str(REPO / "src"),
     }
     proc = subprocess.Popen(

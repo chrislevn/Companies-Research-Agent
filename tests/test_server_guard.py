@@ -184,6 +184,31 @@ def test_auth_disabled_does_not_open_the_api_through_a_tunnel(client_factory, mo
     assert response.status_code == 401
 
 
+def test_auth_status_reports_signed_in_under_local_bypass(client_factory, monkeypatch):
+    """The page reads /api/auth/status to decide whether to show the login
+    screen; under the local bypass it must agree with the open API and report
+    the owner as signed in, so no login form is shown."""
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    client = client_factory()  # local, no public_hosts
+    status = client.get("/api/auth/status", headers={"x-cr-token": _token()}).json()
+    assert status["authenticated"] is True
+    assert status["user"] is not None
+
+
+def test_auth_status_stays_signed_out_over_a_tunnel(client_factory, monkeypatch):
+    """Same flag, but public_hosts set: the status must not claim signed-in,
+    even from a loopback peer (reverse proxy in front of the tunnel)."""
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+    client = client_factory(base_url=TUNNEL, public_hosts="*.trycloudflare.com",
+                            peer="127.0.0.1")
+    _make_owner()
+    status = client.get(
+        "/api/auth/status",
+        headers={"x-cr-token": _token(), "origin": TUNNEL},
+    ).json()
+    assert status["authenticated"] is False
+
+
 def test_auth_disabled_over_tunnel_never_bootstraps_an_owner(client_factory, monkeypatch):
     """The tunnel branch must not create a local owner as a side effect —
     the guard never reaches ensure_local_owner when public_hosts is set."""
