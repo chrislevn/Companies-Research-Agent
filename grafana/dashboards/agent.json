@@ -16,6 +16,221 @@
   },
   "panels": [
     {
+      "id": 30,
+      "type": "row",
+      "title": "Health & uptime",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 31,
+      "title": "Agent status",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Prometheus' own view of the target. Down usually means the agent is bound to 127.0.0.1 while this scrape comes from a container.",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"companies-research-agent\"}",
+          "legendFormat": "up",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 32,
+      "title": "Uptime",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "How long this process has been exporting.",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - agent_start_time_seconds",
+          "legendFormat": "uptime",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 33,
+      "title": "Restarts (24h)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "`up` cannot show this: it reads 1 again by the time anyone looks.",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "changes(agent_start_time_seconds[24h])",
+          "legendFormat": "restarts",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 34,
+      "title": "Running configuration",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Which backend and model are ACTUALLY loaded. The most expensive demo bug is an agent running something other than what you believe.",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agent_build_info",
+          "legendFormat": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          },
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "Value": true,
+              "service": true
+            },
+            "renameByName": {
+              "triage_backend": "triage backend",
+              "triage_model": "triage model",
+              "research_provider": "research provider",
+              "version": "build"
+            }
+          }
+        }
+      ]
+    },
+    {
       "id": 1,
       "type": "row",
       "title": "Scan overview",
@@ -24,7 +239,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 6
       },
       "panels": []
     },
@@ -41,7 +256,7 @@
         "h": 5,
         "w": 4,
         "x": 0,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -74,7 +289,7 @@
         "h": 5,
         "w": 5,
         "x": 4,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -107,7 +322,7 @@
         "h": 5,
         "w": 5,
         "x": 9,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -141,7 +356,7 @@
         "h": 5,
         "w": 10,
         "x": 14,
-        "y": 1
+        "y": 7
       },
       "targets": [
         {
@@ -170,7 +385,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 12
       },
       "panels": []
     },
@@ -187,7 +402,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 7
+        "y": 13
       },
       "targets": [
         {
@@ -221,7 +436,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 7
+        "y": 13
       },
       "targets": [
         {
@@ -251,7 +466,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 20
       },
       "panels": []
     },
@@ -268,7 +483,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 15
+        "y": 21
       },
       "targets": [
         {
@@ -302,7 +517,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 15
+        "y": 21
       },
       "targets": [
         {
@@ -331,7 +546,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 28
       },
       "panels": []
     },
@@ -348,7 +563,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 29
       },
       "targets": [
         {
@@ -391,7 +606,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 29
       },
       "targets": [
         {
@@ -421,7 +636,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 36
       },
       "panels": []
     },
@@ -438,7 +653,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 31
+        "y": 37
       },
       "targets": [
         {
@@ -481,7 +696,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 31
+        "y": 37
       },
       "targets": [
         {
@@ -515,7 +730,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 31
+        "y": 37
       },
       "targets": [
         {
@@ -544,7 +759,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 44
       },
       "panels": []
     },
@@ -561,7 +776,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 45
       },
       "targets": [
         {
@@ -574,6 +789,120 @@
           }
         }
       ]
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Dependencies & throughput",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "panels": []
+    },
+    {
+      "id": 41,
+      "title": "Throughput (tool calls/sec)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "Sourced from the gate, so this works whether or not tracing is on.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (tool) (rate(agent_tool_calls_total[5m]))",
+          "legendFormat": "{{tool}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 42,
+      "title": "Span latency p95 by operation",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "The dependency breakdown that applies to a single-service agent: where time goes inside a scan. Tempo's service-graph processor is also enabled, but it derives *cross-service* edges and this agent is one service, so it emits none \u2014 the call structure lives in the span hierarchy instead (scan \u2192 stage.triage \u2192 tool.gmail_read). Needs TRACING_ENABLED=true.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 54
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, span_name) (rate(traces_spanmetrics_latency_bucket[5m])))",
+          "legendFormat": "{{span_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 43,
+      "title": "Span rate by operation",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cra-prometheus"
+      },
+      "description": "RED metrics per span name, generated by Tempo. Needs TRACING_ENABLED=true.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 54
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (span_name) (rate(traces_spanmetrics_calls_total[5m]))",
+          "legendFormat": "{{span_name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cra-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      }
     }
   ]
 }

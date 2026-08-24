@@ -15,3 +15,25 @@ storage:
       path: /var/tempo/blocks
     wal:
       path: /var/tempo/wal
+
+# Turns received spans into two derived metric families and pushes them to
+# Prometheus: `traces_service_graph_*` (who calls whom, and how often it fails)
+# and `traces_spanmetrics_*` (RED metrics per span name). This is what makes
+# the Dependencies view possible without instrumenting call edges by hand —
+# the edges are already implied by parent/child span relationships.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+  traces_storage:
+    path: /var/tempo/generator/traces
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]

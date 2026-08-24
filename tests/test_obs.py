@@ -109,6 +109,7 @@ def test_every_required_metric_family_exists():
         "agent_tool_duration_seconds", "agent_llm_tokens_total",
         "agent_llm_cost_usd_total", "agent_stage_duration_seconds",
         "agent_brief_cost_usd", "agent_scan_leads_total",
+        "agent_start_time_seconds", "agent_build_info",
     }
     metrics.record_tool_call(tool="t", caller="c", ok=True, denied_at=None, duration_ms=5)
     metrics.record_tool_call(tool="t", caller="c", ok=False, denied_at="scopes", duration_ms=1)
@@ -117,6 +118,7 @@ def test_every_required_metric_family_exists():
                          cost_usd=0.01)
     metrics.record_brief_cost(0.02)
     metrics.record_scan_outcome("lead", 1)
+    metrics.mark_started()
 
     text = metrics.snapshot()
     for family in required:
@@ -183,11 +185,12 @@ def test_dashboard_is_provisioned_where_grafana_looks_for_it():
     assert path in mounts, "the dashboard directory is not mounted into the container"
 
 
-def test_dashboard_has_the_six_required_rows():
+def test_dashboard_has_every_required_row():
     dashboard = json.loads((ROOT / "grafana/dashboards/agent.json").read_text())
     rows = [p["title"] for p in dashboard["panels"] if p["type"] == "row"]
-    for required in ("Scan overview", "Per-agent success rate", "Tool gate denials",
-                     "Latency by stage", "Cost per brief", "Recent traces"):
+    for required in ("Health & uptime", "Scan overview", "Per-agent success rate",
+                     "Tool gate denials", "Latency by stage", "Cost per brief",
+                     "Recent traces", "Dependencies & throughput"):
         assert any(required.lower() in r.lower() for r in rows), f"missing row: {required}"
 
 
@@ -208,6 +211,7 @@ def test_every_dashboard_query_references_a_metric_we_emit():
     import re
 
     dashboard = json.loads((ROOT / "grafana/dashboards/agent.json").read_text())
+    metrics.mark_started()          # labelled gauges have no child until set
     exported = metrics.snapshot()
     # Everything prometheus_client derives from a histogram or counter.
     suffixes = ("_bucket", "_count", "_sum", "_total", "_created")
@@ -234,3 +238,70 @@ def test_tempo_receives_on_the_port_the_agent_sends_to():
 
     endpoint = _yaml("tempo.yml")["distributor"]["receivers"]["otlp"]["protocols"]["http"]["endpoint"]
     assert endpoint.rsplit(":", 1)[1] in SETTINGS.otlp_endpoint
+
+
+# --- alerting ---------------------------------------------------------------
+
+
+def test_alert_rules_are_valid_and_grouped():
+    groups = _yaml("alerts.yml")["groups"]
+    assert groups, "no alert groups"
+    for group in groups:
+        assert group["rules"], f"group {group['name']!r} has no rules"
+        for rule in group["rules"]:
+            assert rule["expr"].strip(), f"{rule['alert']} has an empty expression"
+            assert rule["labels"]["severity"] in ("critical", "warning", "info")
+            assert rule["annotations"]["summary"], f"{rule['alert']} has no summary"
+
+
+def test_every_alert_queries_a_metric_we_actually_emit():
+    """A rule on a metric that does not exist never fires, and looks fine."""
+    import re
+
+    metrics.mark_started()
+    exported = metrics.snapshot()
+    suffixes = ("_bucket", "_count", "_sum", "_total", "_created")
+
+    checked = 0
+    for group in _yaml("alerts.yml")["groups"]:
+        for rule in group["rules"]:
+            for name in set(re.findall(r"\bagent_[a-z0-9_]+", rule["expr"])):
+                base = name
+                for suffix in suffixes:
+                    if base.endswith(suffix):
+                        base = base[: -len(suffix)]
+                        break
+                assert base in exported, (
+                    f"alert {rule['alert']!r} queries {name!r}, which the agent "
+                    "does not export"
+                )
+                checked += 1
+    assert checked > 5, "the scan found almost no metrics — the extraction is broken"
+
+
+def test_prometheus_loads_the_rules_file_that_is_mounted():
+    """A rules file present on disk but unmounted is a file nobody evaluates."""
+    referenced = _yaml("prometheus.yml")["rule_files"]
+    mounts = [v.split(":")[1]
+              for v in _yaml("docker-compose.yml")["services"]["prometheus"]["volumes"]]
+    for path in referenced:
+        assert path in mounts, f"{path} is referenced but never mounted"
+
+
+def test_the_agent_down_alert_exists_and_matches_the_scrape_job():
+    """A job-name typo makes AgentDown silently unfirable."""
+    job = _yaml("prometheus.yml")["scrape_configs"][0]["job_name"]
+    rules = [r for g in _yaml("alerts.yml")["groups"] for r in g["rules"]]
+    down = next((r for r in rules if r["alert"] == "AgentDown"), None)
+    assert down, "there is no alert for the agent being unreachable"
+    assert job in down["expr"], f"AgentDown does not reference the {job!r} job"
+
+
+def test_tempo_pushes_to_a_prometheus_that_accepts_remote_write():
+    """The service graph exists only if this seam lines up."""
+    url = _yaml("tempo.yml")["metrics_generator"]["storage"]["remote_write"][0]["url"]
+    assert "prometheus:9090" in url
+    cmd = _yaml("docker-compose.yml")["services"]["prometheus"]["command"]
+    assert any("remote-write-receiver" in c for c in cmd), (
+        "Tempo pushes service-graph metrics but Prometheus will refuse them"
+    )

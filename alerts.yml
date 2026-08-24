@@ -1,0 +1,98 @@
+# Alerting rules for the agent.
+#
+# The bar for a rule here is that it names something a person would actually do
+# something about. A rule that fires during normal operation trains its reader
+# to ignore the alert page, which is worse than having no rules: the noisy
+# dashboard and the empty one convey the same amount of information, but the
+# noisy one costs attention to reach that state.
+#
+# Deliberately absent: "scan found no leads". On a real inbox zero leads is the
+# normal outcome of a quiet morning, not a fault.
+
+groups:
+  - name: availability
+    rules:
+      - alert: AgentDown
+        expr: up{job="companies-research-agent"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "The agent is not exporting metrics"
+          description: >-
+            Prometheus cannot scrape the agent. Either it is not running, or it
+            is bound to 127.0.0.1 and this scrape comes from a container —
+            start it with METRICS_HOST=0.0.0.0 if you want it watched from here.
+
+      - alert: AgentRestartLoop
+        # `up` says nothing about this: by the time anyone looks it is 1 again.
+        expr: changes(agent_start_time_seconds[15m]) > 2
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "The agent has restarted more than twice in 15 minutes"
+          description: "Something is killing the process shortly after it starts."
+
+  - name: correctness
+    rules:
+      - alert: ToolErrorRateHigh
+        expr: |
+          sum(rate(agent_tool_calls_total{outcome="error"}[10m]))
+            /
+          clamp_min(sum(rate(agent_tool_calls_total[10m])), 0.001)
+            > 0.10
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 10% of tool calls are erroring"
+          description: >-
+            Errors are execution failures, not refusals — a refusal is counted
+            as `denied`. Check the provider and the network before the model.
+
+      - alert: AuditLogUnwritable
+        # A denial at the audit gate means a side effect was refused *because*
+        # it could not be recorded. That is the harness working, and it is also
+        # a broken database.
+        expr: increase(agent_tool_denied_total{gate="audit"}[10m]) > 0
+        for: 0m
+        labels: {severity: critical}
+        annotations:
+          summary: "A side-effecting tool was refused because the audit log could not be written"
+          description: "Check the SQLite file's permissions and free disk."
+
+  - name: security
+    rules:
+      - alert: ScopeDenialSpike
+        # Not necessarily an attack — a revoked scope produces the same shape.
+        # Either way somebody asked for something they are not allowed, often
+        # enough to be worth a look.
+        expr: increase(agent_tool_denied_total{gate="scopes"}[10m]) > 5
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "Repeated refusals at the scopes gate"
+          description: >-
+            Either TOOL_SCOPES no longer grants something the pipeline needs, or
+            a delivery is being attempted to an address outside ALLOWED_RECIPIENTS.
+
+  - name: cost-and-latency
+    rules:
+      - alert: ResearchLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95, sum by (le) (rate(agent_stage_duration_seconds_bucket{stage="research"}[15m]))
+          ) > 300
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 research latency is over 5 minutes"
+          description: "Lower RESEARCH_EFFORT or reduce max searches per company."
+
+      - alert: BriefCostHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(agent_brief_cost_usd_bucket[1h]))) > 0.50
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 spend per brief is over $0.50"
+          description: >-
+            List prices, so this is an upper bound. Still worth checking that
+            research is not re-running against a cache that should have hit.

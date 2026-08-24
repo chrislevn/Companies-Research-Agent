@@ -18,7 +18,8 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 try:  # pragma: no cover - import guard
-    from prometheus_client import CollectorRegistry, Counter, Histogram, start_http_server
+    from prometheus_client import (CollectorRegistry, Counter, Gauge, Histogram,
+                                   start_http_server)
 
     AVAILABLE = True
 except Exception:  # pragma: no cover
@@ -37,6 +38,9 @@ class _Noop:
     def observe(self, *_a: Any, **_k: Any) -> None:
         pass
 
+    def set(self, *_a: Any, **_k: Any) -> None:
+        pass
+
 
 REGISTRY = CollectorRegistry() if AVAILABLE else None
 _server_started = False
@@ -45,6 +49,10 @@ _lock = threading.Lock()
 
 def _counter(name: str, doc: str, labels: list[str]):
     return Counter(name, doc, labels, registry=REGISTRY) if AVAILABLE else _Noop()
+
+
+def _gauge(name: str, doc: str, labels: list[str]):
+    return Gauge(name, doc, labels, registry=REGISTRY) if AVAILABLE else _Noop()
 
 
 def _histogram(name: str, doc: str, labels: list[str], buckets=None):
@@ -87,6 +95,60 @@ BRIEF_COST = _histogram(
 SCAN_LEADS = _counter(
     "agent_scan_leads_total", "Messages by what the scan decided about them", ["outcome"]
 )
+
+# Health and uptime. Prometheus already synthesises `up` for a target it can
+# reach, which answers "is it listening" — these answer the two questions that
+# follow it: how long has this process been alive, and *what* is it running.
+# A restart loop and a healthy process look identical on `up` alone, because
+# `up` is 1 again by the time anyone looks.
+START_TIME = _gauge(
+    "agent_start_time_seconds", "Unix time this agent process began exporting", []
+)
+BUILD_INFO = _gauge(
+    "agent_build_info",
+    "Always 1. The labels carry which configuration is actually running.",
+    ["version", "triage_backend", "triage_model", "research_provider"],
+)
+
+
+def mark_started() -> None:
+    """Stamp process start and the running configuration.
+
+    Called from ``serve()``. The build labels matter more than they look: the
+    most expensive class of demo bug is an agent running a different backend
+    than the operator believes, and this is the one place that is visible
+    without reading a log.
+    """
+    if not AVAILABLE:
+        return
+    import time as _time
+
+    from ..config import SETTINGS
+
+    START_TIME.set(_time.time())
+    BUILD_INFO.labels(
+        version=_version(),
+        triage_backend=SETTINGS.triage_backend or "anthropic",
+        triage_model=(SETTINGS.ollama_model if SETTINGS.triage_backend == "ollama"
+                      else SETTINGS.triage_model),
+        research_provider=SETTINGS.research_provider or "claude_web",
+    ).set(1)
+
+
+def _version() -> str:
+    """Short git sha when there is one, else 'dev'. Never raises."""
+    import subprocess
+
+    try:
+        from ..config import ROOT
+
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=ROOT, capture_output=True, text=True, timeout=2,
+        )
+        return out.stdout.strip() or "dev"
+    except Exception:
+        return "dev"
 
 
 # --- recording helpers -----------------------------------------------------
@@ -155,6 +217,7 @@ def serve(port: int | None = None, host: str | None = None) -> bool:
             bind_port = port or SETTINGS.metrics_port
             start_http_server(bind_port, addr=bind_host, registry=REGISTRY)
             _server_started = True
+            mark_started()
             log.info("Metrics on http://%s:%d/metrics", bind_host, bind_port)
             if bind_host not in ("127.0.0.1", "localhost", "::1"):
                 log.warning(

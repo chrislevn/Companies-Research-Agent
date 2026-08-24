@@ -21,9 +21,21 @@ msal>=1.28.0
 pytest>=8.0.0
 # Browser-level UI tests. Optional: they skip if it or Chrome is absent.
 playwright>=1.40.0
+# Only the tests need YAML — they parse prometheus.yml/tempo.yml/alerts.yml to
+# keep the observability configs honest. The agent itself never reads YAML.
+pyyaml>=6.0
 
 # Observability (optional — the agent runs without these, just unmeasured)
 prometheus-client>=0.20.0
 opentelemetry-sdk>=1.25.0
 opentelemetry-exporter-otlp-proto-http>=1.25.0
-pyyaml>=6.0
+# LLM-call observability: prompt/completion, per-call cost, prompt versions.
+# Off unless LANGFUSE_ENABLED=true, and metadata-only unless you also opt into
+# content capture — see obs/langfuse.py for why that default is what it is.
+langfuse>=3.0.0
+
+# Brief export. Both are pure Python — no native libraries to install,
+# which is why neither is WeasyPrint or LibreOffice. A brief still renders
+# as Markdown and HTML if either is missing.
+fpdf2>=2.8.0
+python-docx>=1.1.0

@@ -258,70 +258,88 @@ def tool(spec: ToolSpec) -> Callable:
                                    elapsed_ms, trace_id)
                 return ToolDenied(gate, reason)
 
-            # 1 ── schema
-            try:
-                spec.args_model(**args)
-                gates["schema"] = True
-            except ValidationError as exc:
-                raise deny("schema", f"arguments do not match {spec.args_model.__name__} "
-                                     f"({exc.error_count()} error(s))") from None
+            # One span per gate, nested under one span for the whole call. The
+            # gates are individually sub-millisecond, so this is not about
+            # profiling them — it is so the harness is *legible*: a trace shows
+            # six named steps and stops at the one that refused, which is the
+            # same story the audit row tells, told where latency lives.
+            with _tracing.span(f"tool.{spec.name}", **{
+                "tool.name": spec.name, "tool.caller": who,
+                "tool.side_effect": spec.side_effect,
+            }):
+                # 1 ── schema
+                with _tracing.span("gate.schema"):
+                    try:
+                        spec.args_model(**args)
+                        gates["schema"] = True
+                    except ValidationError as exc:
+                        raise deny("schema",
+                                   f"arguments do not match {spec.args_model.__name__} "
+                                   f"({exc.error_count()} error(s))") from None
 
-            # 2 ── auth
-            if spec.requires_auth and not _has_credentials(spec):
-                raise deny("auth", "no usable credentials for this tool")
-            gates["auth"] = True
+                # 2 ── auth
+                with _tracing.span("gate.auth"):
+                    if spec.requires_auth and not _has_credentials(spec):
+                        raise deny("auth", "no usable credentials for this tool")
+                    gates["auth"] = True
 
-            # 3 ── scopes
-            missing = spec.scopes - SETTINGS.tool_scopes
-            if missing:
-                raise deny("scopes", f"missing scope(s): {', '.join(sorted(missing))}")
-            for check in _scope_checks:
-                reason = check(spec, args)
-                if reason:
-                    raise deny("scopes", reason)
-            gates["scopes"] = True
+                # 3 ── scopes
+                with _tracing.span("gate.scopes"):
+                    missing = spec.scopes - SETTINGS.tool_scopes
+                    if missing:
+                        raise deny("scopes",
+                                   f"missing scope(s): {', '.join(sorted(missing))}")
+                    for check in _scope_checks:
+                        reason = check(spec, args)
+                        if reason:
+                            raise deny("scopes", reason)
+                    gates["scopes"] = True
 
-            # 4 ── rate limit
-            if not RATE.allow(spec.name, spec.rate_limit_per_min):
-                raise deny("rate_limit",
-                           f"more than {spec.rate_limit_per_min} call(s)/min for {spec.name}")
-            gates["rate_limit"] = True
+                # 4 ── rate limit
+                with _tracing.span("gate.rate_limit"):
+                    if not RATE.allow(spec.name, spec.rate_limit_per_min):
+                        raise deny("rate_limit",
+                                   f"more than {spec.rate_limit_per_min} call(s)/min "
+                                   f"for {spec.name}")
+                    gates["rate_limit"] = True
 
-            # 5 ── audit, written before execute so an attempt always leaves a trace
-            if SETTINGS.tool_audit_enabled:
+                # 5 ── audit, written before execute so an attempt always leaves a trace
+                with _tracing.span("gate.audit"):
+                    if SETTINGS.tool_audit_enabled:
+                        try:
+                            _store().open_tool_call(
+                                call_id=call_id, tool=spec.name, caller=who,
+                                args_hash=args_hash, gate_results=gates,
+                                trace_id=trace_id,
+                            )
+                            opened = True
+                            gates["audit"] = True
+                        except Exception as exc:
+                            # An unwritable audit log is a refusal, not a warning:
+                            # an unaudited side effect is exactly what this exists
+                            # to stop.
+                            if spec.side_effect:
+                                raise deny("audit",
+                                           f"cannot record audit row: {exc}") from None
+                            gates["audit"] = False
+                            log.warning("audit row failed for read-only %s: %s",
+                                        spec.name, exc)
+                    else:
+                        gates["audit"] = True
+
+                # 6 ── execute
                 try:
-                    _store().open_tool_call(
-                        call_id=call_id, tool=spec.name, caller=who,
-                        args_hash=args_hash, gate_results=gates, trace_id=trace_id,
-                    )
-                    opened = True
-                    gates["audit"] = True
+                    with _tracing.span("gate.execute"):
+                        result = fn(**args, **deps)
+                except ToolDenied:
+                    raise
                 except Exception as exc:
-                    # An unwritable audit log is a refusal, not a warning: an
-                    # unaudited side effect is exactly what this exists to stop.
-                    if spec.side_effect:
-                        raise deny("audit", f"cannot record audit row: {exc}") from None
-                    gates["audit"] = False
-                    log.warning("audit row failed for read-only %s: %s", spec.name, exc)
-            else:
-                gates["audit"] = True
-
-            # 6 ── execute
-            try:
-                with _tracing.span(f"tool.{spec.name}", **{
-                    "tool.name": spec.name, "tool.caller": who,
-                    "tool.side_effect": spec.side_effect,
-                }):
-                    result = fn(**args, **deps)
-            except ToolDenied:
-                raise
-            except Exception as exc:
-                gates["execute"] = False
-                finish(False, f"{type(exc).__name__}: {exc}")
-                raise
-            gates["execute"] = True
-            finish(True, None)
-            return result
+                    gates["execute"] = False
+                    finish(False, f"{type(exc).__name__}: {exc}")
+                    raise
+                gates["execute"] = True
+                finish(True, None)
+                return result
 
         wrapper.spec = spec  # type: ignore[attr-defined]
         return wrapper

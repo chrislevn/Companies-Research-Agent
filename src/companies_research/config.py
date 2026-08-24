@@ -146,8 +146,24 @@ class Settings:
     metrics_host: str = "127.0.0.1"
     tracing_enabled: bool = False
     otlp_endpoint: str = "http://localhost:4318/v1/traces"
+    langfuse_enabled: bool = False
+    langfuse_host: str = "http://localhost:3001"
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    # Off by default, and that default is the whole point. Langfuse exists to
+    # show you the prompt and the completion — which here means email bodies
+    # and the names of real people. Metadata (model, tokens, cost, latency,
+    # verdict counts) answers most operational questions and carries none of
+    # that, so it is what you get unless you deliberately ask for more.
+    langfuse_capture_content: bool = False
     prompts_dir: Path = ROOT / "prompts"
     org_profile_file: Path = ROOT / "profile.json"
+    # Empty by default: the server answers only to localhost names. Set when
+    # exposing the UI through a tunnel or reverse proxy — see DEPLOYMENT.md.
+    public_hosts: list[str] = field(default_factory=list)
+    # First signup claims the instance; further signups are refused unless this
+    # is turned on. Enforced in webapp.auth.create_user, not in the endpoint.
+    signup_open: bool = False
     tool_scopes: frozenset[str] = frozenset()
     tool_audit_enabled: bool = True
     allowed_recipients: list[str] = field(default_factory=list)
@@ -230,8 +246,16 @@ def load_settings() -> Settings:
         metrics_host=os.getenv("METRICS_HOST", "127.0.0.1"),
         tracing_enabled=_bool("TRACING_ENABLED", False),
         otlp_endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4318/v1/traces"),
+        langfuse_enabled=_bool("LANGFUSE_ENABLED", False),
+        # 3001, not 3000: Langfuse ships on 3000 and so does Grafana.
+        langfuse_host=os.getenv("LANGFUSE_HOST", "http://localhost:3001"),
+        langfuse_public_key=os.getenv("LANGFUSE_PUBLIC_KEY", ""),
+        langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY", ""),
+        langfuse_capture_content=_bool("LANGFUSE_CAPTURE_CONTENT", False),
         prompts_dir=_path("PROMPTS_DIR", "prompts"),
         org_profile_file=_path("ORG_PROFILE_FILE", "profile.json"),
+        public_hosts=_csv("PUBLIC_HOSTS"),
+        signup_open=_bool("SIGNUP_OPEN", False),
         tool_scopes=_scopes("TOOL_SCOPES"),
         tool_audit_enabled=_bool("TOOL_AUDIT_ENABLED", True),
         allowed_recipients=_csv("ALLOWED_RECIPIENTS"),

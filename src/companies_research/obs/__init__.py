@@ -7,12 +7,12 @@ than no telemetry.
 
 from __future__ import annotations
 
-from . import metrics, tracing
+from . import langfuse, metrics, tracing
 from .cost import LEDGER, CostLedger, Usage, price, usage_from_response
 
 __all__ = [
-    "LEDGER", "CostLedger", "Usage", "metrics", "price", "tracing", "usage_from_response",
-    "start",
+    "LEDGER", "CostLedger", "Usage", "langfuse", "metrics", "price", "tracing",
+    "usage_from_response", "start", "shutdown",
 ]
 
 
@@ -24,3 +24,10 @@ def start() -> None:
         metrics.serve()
     if SETTINGS.tracing_enabled:
         tracing.setup()
+    if SETTINGS.langfuse_enabled:
+        langfuse.setup()
+
+
+def shutdown() -> None:
+    """Flush buffered telemetry. Losing the last batch is a poor way to end."""
+    langfuse.flush()
